@@ -11,18 +11,15 @@ function checkWinner(board) {
     [0, 4, 8], [2, 4, 6]
   ];
   for (const [a, b, c] of lines) {
-    // Cek `board[a]` akan menganggap string kosong ('') sebagai false, jadi ini aman
     if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
   }
-  // Cek jika semua sel sudah terisi (bukan string kosong)
   return board.every(cell => cell !== '') ? 'draw' : null;
 }
 
 export default function Home() {
-  const [user, setUser] = useState(null); // firebase user
+  const [user, setUser] = useState(null);
   const [roomId, setRoomId] = useState('');
-  const [playerSymbol, setPlayerSymbol] = useState(null); // 'X' or 'O'
-  // ✅ PERBAIKAN: Gunakan string kosong ('') sebagai default, bukan null
+  const [playerSymbol, setPlayerSymbol] = useState(null);
   const [board, setBoard] = useState(Array(9).fill(''));
   const [turn, setTurn] = useState('X');
   const [status, setStatus] = useState('idle');
@@ -30,10 +27,246 @@ export default function Home() {
   const roomRefLive = useRef(null);
   const [roomInfo, setRoomInfo] = useState(null);
 
-  // auth: sign in anonymously if not signed in
   useEffect(() => {
-    signInAnonymously(auth).catch(err => {
-      // ignore
+    signInAnonymously(auth).catch(err => {});
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u || null);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const roomsRef = ref(db, 'rooms');
+    const unsub = onValue(roomsRef, snapshot => {
+      const data = snapshot.val() || {};
+      const arr = Object.keys(data).map(id => {
+        const r = data[id] || {};
+        return {
+          id,
+          playersCount: (r.playerX ? 1 : 0) + (r.playerO ? 1 : 0),
+          status: r.status || 'waiting'
+        };
+      });
+      setRoomsList(arr);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (roomRefLive.current) roomRefLive.current();
+    if (!roomId) {
+      setRoomInfo(null);
+      setBoard(Array(9).fill(''));
+      setTurn('X');
+      setStatus('idle');
+      return;
+    }
+
+    const rref = ref(db, `rooms/${roomId}`);
+    const unsub = onValue(rref, snap => {
+      const data = snap.val();
+      if (data) {
+        setBoard(data.board || Array(9).fill(''));
+        setTurn(data.turn || 'X');
+        setStatus(data.status || 'waiting');
+        setRoomInfo(data);
+      } else {
+        setRoomId('');
+        alert('Room tidak lagi tersedia.');
+      }
+    });
+
+    roomRefLive.current = unsub;
+    return () => {
+      if (roomRefLive.current) roomRefLive.current();
+      roomRefLive.current = null;
+    };
+  }, [roomId]);
+
+  async function createRoom() {
+    if (!user) return alert('Signing in... coba lagi sebentar.');
+    const rref = push(ref(db, 'rooms'));
+    const id = rref.key;
+    const initial = {
+      board: Array(9).fill(''),
+      turn: 'X',
+      status: 'waiting',
+      playerX: user.uid,
+      createdAt: Date.now()
+    };
+    await set(rref, initial);
+    setRoomId(id);
+    setPlayerSymbol('X');
+  }
+
+  async function joinRoom(id) {
+    if (!user) return alert('Signing in... coba lagi sebentar.');
+    const r = ref(db, `rooms/${id}`);
+    const snap = await get(r);
+    if (!snap.exists()) return alert('Room not found');
+    const data = snap.val();
+
+    if (data.playerX === user.uid || data.playerO === user.uid) {
+      setRoomId(id);
+      setPlayerSymbol(data.playerX === user.uid ? 'X' : 'O');
+      return;
+    }
+
+    if (!data.playerO) {
+      await update(r, { playerO: user.uid, status: 'playing' });
+      setPlayerSymbol('O');
+    } else if (!data.playerX) {
+      await update(r, { playerX: user.uid, status: 'playing' });
+      setPlayerSymbol('X');
+    } else {
+      alert('Room penuh');
+      return;
+    }
+    setRoomId(id);
+  }
+
+  async function makeMove(idx) {
+    if (!user || !roomId || status !== 'playing' || !playerSymbol || playerSymbol !== turn || board[idx] !== '') return;
+
+    const newBoard = [...board];
+    newBoard[idx] = playerSymbol;
+
+    const winner = checkWinner(newBoard);
+    const roomRef = ref(db, `rooms/${roomId}`);
+
+    const updateObj = {
+      board: newBoard,
+      turn: playerSymbol === 'X' ? 'O' : 'X',
+      lastMove: { by: user.uid, idx, at: Date.now() }
+    };
+
+    if (winner) {
+      updateObj.status = winner === 'draw' ? 'draw' : `${winner}-won`;
+    }
+
+    await update(roomRef, updateObj);
+  }
+
+  // ✅ FUNGSI DENGAN LOGIKA BARU
+  async function resetRoom() {
+    if (!roomId || !roomInfo || !user) return;
+    // Hanya user yang merupakan playerX (pembuat room) yang bisa mereset.
+    if (roomInfo.playerX !== user.uid) {
+      return alert('Hanya pembuat room (Pemain X) yang dapat mereset permainan.');
+    }
+    const roomRef = ref(db, `rooms/${roomId}`);
+    await update(roomRef, { board: Array(9).fill(''), turn: 'X', status: 'playing' });
+  }
+
+  async function leaveRoom() {
+    if (!roomId || !user) return;
+    const currentRoomId = roomId; // Simpan roomId sebelum di-reset
+    setRoomId('');
+    setPlayerSymbol(null);
+
+    const r = ref(db, `rooms/${currentRoomId}`);
+    const snap = await get(r);
+    if (!snap.exists()) return;
+
+    const data = snap.val();
+    const updates = {};
+    let isPlayerX = data.playerX === user.uid;
+    let isPlayerO = data.playerO === user.uid;
+
+    if (isPlayerX) updates.playerX = null;
+    if (isPlayerO) updates.playerO = null;
+
+    const otherPlayerExists = isPlayerX ? !!data.playerO : !!data.playerX;
+    
+    if (!otherPlayerExists) {
+      await set(r, null);
+    } else {
+      await update(r, updates);
+    }
+  }
+
+  return (
+    <main style={{ fontFamily: 'Inter, system-ui, sans-serif', padding: 24 }}>
+      <h1>TicTacToe — Online (Vercel + Firebase)</h1>
+
+      <div style={{ marginBottom: 12 }}>
+        <div>User: {user ? user.uid.substring(0, 8) : '... signing in'}</div>
+      </div>
+
+      <div style={{ marginTop: 8 }}>
+        <button onClick={createRoom}>Create Room (become X)</button>
+        <button style={{ marginLeft: 8 }} onClick={() => {
+          const avail = roomsList.find(r => r.playersCount < 2);
+          if (avail) joinRoom(avail.id);
+          else alert('Tidak ada room kosong saat ini');
+        }}>Quick Join</button>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <strong>Available Rooms</strong>
+        <ul>
+          {roomsList.length === 0 && <li>(no rooms)</li>}
+          {roomsList.map(r => (
+            <li key={r.id}>
+              <button onClick={() => joinRoom(r.id)}>{r.id.substring(r.id.length - 6)}</button>
+              {' '}({r.status}) — players: {r.playersCount}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <label>Room ID: <input value={roomId} onChange={e => setRoomId(e.target.value)} /></label>
+        <button onClick={() => joinRoom(roomId)}>Join</button>
+        <button style={{ marginLeft: 8 }} onClick={leaveRoom}>Leave Room</button>
+      </div>
+
+      {roomId && (
+        <div style={{ marginTop: 20 }}>
+          <div>Player: <strong>{playerSymbol || '-'}</strong> | Turn: <strong>{turn}</strong> | Status: <strong>{status}</strong></div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 80px)', gap: 8, marginTop: 12 }}>
+            {board.map((cell, i) => {
+              const canPlay = playerSymbol === turn && cell === '' && status === 'playing';
+              return (
+                <button
+                  key={i}
+                  onClick={() => makeMove(i)}
+                  style={{ height: 80, fontSize: 32, cursor: canPlay ? 'pointer' : 'not-allowed' }}
+                  disabled={!canPlay}
+                  title={canPlay ? 'Klik untuk bergerak' : 'Tidak bisa klik sekarang'}
+                >
+                  {cell}
+                </button>
+              );
+            })}
+          </div>
+
+          <div style={{ marginTop: 12 }}>
+            {/* Tombol reset hanya terlihat jika user adalah pembuat room */}
+            {user && roomInfo && user.uid === roomInfo.playerX && (
+              <button onClick={resetRoom}>Reset Game</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      <section style={{ marginTop: 24 }}>
+        <h3>Room Info (debug)</h3>
+        <pre style={{ background: '#f5f5f5', padding: 8 }}>
+          {roomInfo ? JSON.stringify({
+            id: roomId,
+            playerX: roomInfo.playerX ? roomInfo.playerX.substring(0, 8) : null,
+            playerO: roomInfo.playerO ? roomInfo.playerO.substring(0, 8) : null,
+            status: roomInfo.status,
+            turn: roomInfo.turn
+          }, null, 2) : '(no room selected)'}
+        </pre>
+        <p>Note: Buka dua jendela/incognito/browser/device — buat room di satu, lalu join di yang lain.</p>
+      </section>
+    </main>
+  );
+}
     });
 
     const unsub = onAuthStateChanged(auth, (u) => {
