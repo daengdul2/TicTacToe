@@ -1,4 +1,8 @@
 /* ==== RESET DASAR ==== */
+* {
+  box-sizing: border-box;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -15,18 +19,21 @@ body {
 main {
   width: 100%;
   max-width: 480px;
-  margin: 20px;
+  margin: 0 auto;
   padding: 16px;
   background: rgba(255, 255, 255, 0.9);
-  border-radius: 12px;
-  box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+  border-radius: 12px 12px 0 0;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.15);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ==== JUDUL ==== */
 h1 {
-  font-size: 1.6rem;
+  font-size: 1.4rem;
   text-align: center;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   color: #0077ff;
 }
 
@@ -35,12 +42,14 @@ button {
   background: #0077ff;
   color: white;
   border: none;
-  padding: 10px 14px;
-  margin: 4px;
-  border-radius: 8px;
+  padding: 12px 18px;
+  margin: 6px 0;
+  border-radius: 10px;
   cursor: pointer;
+  font-size: 1rem;
   font-weight: 500;
   transition: 0.2s ease-in-out;
+  width: 100%;
 }
 
 button:hover:not(:disabled) {
@@ -54,25 +63,27 @@ button:disabled {
 
 /* ==== INPUT ==== */
 input {
-  padding: 8px;
+  padding: 10px;
   border: 1px solid #ddd;
-  border-radius: 6px;
-  margin-left: 6px;
-  font-size: 0.95rem;
+  border-radius: 8px;
+  font-size: 1rem;
+  width: 100%;
+  margin-top: 6px;
 }
 
 /* ==== BOARD GAME ==== */
 .board {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  margin-top: 16px;
+  gap: 8px;
+  margin-top: 20px;
+  width: 100%;
 }
 
 .cell {
   width: 100%;
-  aspect-ratio: 1 / 1; /* kotak selalu persegi */
-  font-size: 2rem;
+  aspect-ratio: 1 / 1;
+  font-size: 2.2rem;
   font-weight: bold;
   border-radius: 8px;
   border: 2px solid #0077ff;
@@ -89,10 +100,12 @@ input {
   margin: 8px 0;
   padding: 0;
   list-style: none;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .room-list li {
-  margin: 4px 0;
+  margin: 6px 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -106,9 +119,9 @@ input {
   background: #ff4081;
   color: white;
   border: none;
-  padding: 14px;
+  padding: 18px;
   border-radius: 50%;
-  font-size: 1.2rem;
+  font-size: 1.4rem;
   box-shadow: 0 4px 10px rgba(0,0,0,0.25);
   cursor: pointer;
   z-index: 1000;
@@ -117,12 +130,12 @@ input {
 /* ==== CHAT BOX ==== */
 .chat-box {
   position: fixed;
-  bottom: 80px;
+  bottom: 90px;
   right: 20px;
-  width: 300px;
-  max-height: 400px;
+  width: 320px;
+  max-height: 60vh;
   background: white;
-  border-radius: 10px;
+  border-radius: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.25);
   display: flex;
   flex-direction: column;
@@ -133,7 +146,7 @@ input {
 .chat-header {
   background: #0077ff;
   color: white;
-  padding: 10px;
+  padding: 12px;
   font-weight: bold;
   text-align: center;
   cursor: pointer;
@@ -143,46 +156,56 @@ input {
   flex: 1;
   padding: 10px;
   overflow-y: auto;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
 }
 
 .chat-input {
   display: flex;
   padding: 6px;
   border-top: 1px solid #ddd;
+  gap: 6px;
 }
 
 .chat-input input {
   flex: 1;
-  padding: 8px;
+  padding: 10px;
   border-radius: 6px;
   border: 1px solid #ccc;
+  font-size: 0.95rem;
 }
 
 .chat-input button {
-  margin-left: 6px;
   background: #0077ff;
-  color: white;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-radius: 6px;
-  border: none;
-  cursor: pointer;
+  font-size: 0.9rem;
 }
 
 /* ==== MOBILE RESPONSIVE ==== */
 @media (max-width: 600px) {
   main {
-    margin: 10px;
+    border-radius: 0;
     padding: 12px;
   }
 
   h1 {
-    font-size: 1.4rem;
+    font-size: 1.2rem;
+  }
+
+  button {
+    padding: 10px;
+    font-size: 0.95rem;
   }
 
   .chat-box {
     width: 90%;
     right: 5%;
-    bottom: 70px;
+    bottom: 80px;
+    max-height: 65vh;
+  }
+
+  .chat-float-btn {
+    padding: 14px;
+    font-size: 1.2rem;
   }
 }
