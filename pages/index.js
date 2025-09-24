@@ -13,6 +13,8 @@ export default function Home() {
   const [roomsList, setRoomsList] = useState([]);
   const roomRefLive = useRef(null);
   const [roomInfo, setRoomInfo] = useState(null);
+  const [chatOpen, setChatOpen] = useState(false);
+const [messages, setMessages] = useState([]);
 
   // Firebase auth
   useEffect(() => {
@@ -44,6 +46,13 @@ export default function Home() {
     if (roomRefLive.current) roomRefLive.current();
     if (!roomId) {
       setRoomInfo(null);
+      // listen chat realtime
+const chatRef = ref(db, `rooms/${roomId}/chat`);
+onValue(chatRef, (snap) => {
+  const data = snap.val() || {};
+  const arr = Object.values(data).sort((a, b) => a.at - b.at); // urutkan berdasarkan waktu
+  setMessages(arr);
+});
       setBoard(Array(9).fill(''));
       setTurn('X');
       setStatus('idle');
@@ -76,6 +85,22 @@ export default function Home() {
       roomRefLive.current = null;
     };
   }, [roomId, user]);
+
+  async function sendMessage(e) {
+  e.preventDefault();
+  if (!user || !roomId) return;
+  const input = e.target.elements.msg.value.trim();
+  if (!input) return;
+
+  const chatRef = push(ref(db, `rooms/${roomId}/chat`));
+  await set(chatRef, {
+    by: user.uid.substring(0, 8),
+    text: input,
+    at: Date.now()
+  });
+
+  e.target.reset();
+  }
 
   // Buat room
   async function createRoom() {
@@ -218,6 +243,28 @@ export default function Home() {
           <button onClick={resetRoom}>Reset</button>
         </>
       )}
+        {/* Chat Box */}
+<div className={`chat-box ${!chatOpen ? "hidden" : ""}`}>
+  <div className="chat-header" onClick={() => setChatOpen(!chatOpen)}>
+    {chatOpen ? "Tutup Chat" : "Buka Chat"}
+  </div>
+  {chatOpen && (
+    <>
+      <div className="chat-messages">
+        {messages.map((m, i) => (
+          <div key={i}>
+            <strong>{m.by}:</strong> {m.text}
+          </div>
+        ))}
+      </div>
+      <form className="chat-input" onSubmit={sendMessage}>
+        <input name="msg" placeholder="Ketik pesan..." />
+        <button type="submit">Kirim</button>
+      </form>
+    </>
+  )}
+</div>
+        
 
       <section>
         <h3>Room Info</h3>
