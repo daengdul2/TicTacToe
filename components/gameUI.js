@@ -92,6 +92,9 @@ export default function GameUI({
       )}
 
       {/* Chat Box */}
+<button className="chat-float-btn" onClick={() => setChatOpen(!chatOpen)}>
+  💬
+</button>
       <div className={`chat-box ${!chatOpen ? "hidden" : ""}`}>
         {chatOpen && (
           <>
@@ -133,9 +136,6 @@ export default function GameUI({
             : "(no room selected)"}
         </pre>
       </section>
-          <button className="chat-float-btn" onClick={() => setChatOpen(!chatOpen)}>
-  💬
-</button>
     </main>
   );
 }
