@@ -119,21 +119,32 @@ export default function Home() {
   }, [roomId, user]);
 
   // 🔹 Kirim chat
-  async function sendMessage(e) {
-    e.preventDefault();
-    if (!user || !roomId) return;
-    const input = e.target.elements.msg.value.trim();
-    if (!input) return;
+  // Tambahkan state baru
+const [lastMessageTime, setLastMessageTime] = useState(0);
 
-    const chatRef = push(ref(db, `rooms/${roomId}/chat`));
-    await set(chatRef, {
-      by: user.uid.substring(0, 8),
-      text: input,
-      at: Date.now()
-    });
+// 🔹 Kirim chat dengan anti-spam
+async function sendMessage(e) {
+  e.preventDefault();
+  if (!user || !roomId) return;
+  const input = e.target.elements.msg.value.trim();
+  if (!input) return;
 
-    e.target.reset();
+  const now = Date.now();
+  if (now - lastMessageTime < 10000) { // 10 detik
+    alert("Tunggu 10 detik sebelum mengirim pesan lagi!");
+    return;
   }
+
+  const chatRef = push(ref(db, `rooms/${roomId}/chat`));
+  await set(chatRef, {
+    by: user.uid.substring(0, 8),
+    text: input,
+    at: now
+  });
+
+  setLastMessageTime(now); // update waktu terakhir kirim pesan
+  e.target.reset();
+}
 
   // 🔹 Buat room
   async function createRoom() {
