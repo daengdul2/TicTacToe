@@ -12,9 +12,10 @@ export default function Home() {
   const [status, setStatus] = useState('idle');
   const [roomsList, setRoomsList] = useState([]);
   const roomRefLive = useRef(null);
+  const chatRefLive = useRef(null); // untuk menyimpan unsubscribe listener chat
   const [roomInfo, setRoomInfo] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
-const [messages, setMessages] = useState([]);
+  const [messages, setMessages] = useState([]);
 
   // Firebase auth
   useEffect(() => {
@@ -41,65 +42,100 @@ const [messages, setMessages] = useState([]);
     return () => unsub();
   }, []);
 
-  // Listen room aktif
+  // Listen room aktif + chat listener yang benar
   useEffect(() => {
+    // cleanup previous listeners
     if (roomRefLive.current) roomRefLive.current();
+    if (chatRefLive.current) chatRefLive.current();
+
+    // jika tidak ada roomId, reset state dan jangan pasang listener chat
     if (!roomId) {
       setRoomInfo(null);
-      // listen chat realtime
-const chatRef = ref(db, `rooms/${roomId}/chat`);
-onValue(chatRef, (snap) => {
-  const data = snap.val() || {};
-  const arr = Object.values(data).sort((a, b) => a.at - b.at); // urutkan berdasarkan waktu
-  setMessages(arr);
-});
+      setMessages([]); // clear chat when no room
       setBoard(Array(9).fill(''));
       setTurn('X');
       setStatus('idle');
       return;
     }
 
+    // pasang listener untuk room data
     const rref = ref(db, `rooms/${roomId}`);
-    const unsub = onValue(rref, snap => {
+    const unsubRoom = onValue(rref, snap => {
       const data = snap.val();
       if (data) {
-        setBoard(data.board || Array(9).fill(''));
+        // pastikan board selalu array (jika Firebase mengubahnya jadi object)
+        let boardFromDb = data.board || Array(9).fill('');
+        if (!Array.isArray(boardFromDb)) {
+          boardFromDb = Object.keys(boardFromDb)
+            .sort((a,b) => Number(a) - Number(b))
+            .map(k => boardFromDb[k]);
+          while (boardFromDb.length < 9) boardFromDb.push('');
+        }
+
+        setBoard(boardFromDb);
         setTurn(data.turn || 'X');
         setStatus(data.status || 'waiting');
         setRoomInfo(data);
+
         if (user) {
           if (data.playerX === user.uid) setPlayerSymbol('X');
           else if (data.playerO === user.uid) setPlayerSymbol('O');
           else setPlayerSymbol(null);
         }
       } else {
+        // room dihapus
         setRoomInfo(null);
         setRoomId('');
+        setMessages([]);
         alert('Room tidak lagi tersedia.');
       }
     });
 
-    roomRefLive.current = unsub;
+    roomRefLive.current = unsubRoom;
+
+    // pasang listener chat hanya jika roomId valid
+    const chatRef = ref(db, `rooms/${roomId}/chat`);
+    const unsubChat = onValue(chatRef, (snap) => {
+      const data = snap.val();
+      if (!data) {
+        setMessages([]);
+        return;
+      }
+      // data bisa object atau array. Kita ubah jadi array dan urutkan berdasar 'at' atau 'ts'
+      const arr = Array.isArray(data)
+        ? data.filter(Boolean) // jika array, hapus hole
+        : Object.entries(data).map(([key, val]) => ({ key, ...val }));
+
+      // pastikan proper sorting
+      arr.sort((a, b) => (a.at || 0) - (b.at || 0));
+      setMessages(arr);
+    });
+
+    chatRefLive.current = unsubChat;
+
+    // cleanup function: unsub both
     return () => {
       if (roomRefLive.current) roomRefLive.current();
       roomRefLive.current = null;
+      if (chatRefLive.current) chatRefLive.current();
+      chatRefLive.current = null;
     };
   }, [roomId, user]);
 
   async function sendMessage(e) {
-  e.preventDefault();
-  if (!user || !roomId) return;
-  const input = e.target.elements.msg.value.trim();
-  if (!input) return;
+    e.preventDefault();
+    if (!user || !roomId) return;
+    const input = e.target.elements.msg.value.trim();
+    if (!input) return;
 
-  const chatRef = push(ref(db, `rooms/${roomId}/chat`));
-  await set(chatRef, {
-    by: user.uid.substring(0, 8),
-    text: input,
-    at: Date.now()
-  });
+    const chatRef = push(ref(db, `rooms/${roomId}/chat`));
+    await set(chatRef, {
+      by: user.uid.substring(0, 8),
+      text: input,
+      at: Date.now()
+    });
 
-  e.target.reset();
+    e.target.reset();
   }
 
   // Buat room
@@ -243,28 +279,28 @@ onValue(chatRef, (snap) => {
           <button onClick={resetRoom}>Reset</button>
         </>
       )}
-        {/* Chat Box */}
-<div className={`chat-box ${!chatOpen ? "hidden" : ""}`}>
-  <div className="chat-header" onClick={() => setChatOpen(!chatOpen)}>
-    {chatOpen ? "Tutup Chat" : "Buka Chat"}
-  </div>
-  {chatOpen && (
-    <>
-      <div className="chat-messages">
-        {messages.map((m, i) => (
-          <div key={i}>
-            <strong>{m.by}:</strong> {m.text}
-          </div>
-        ))}
+
+      {/* Chat Box */}
+      <div className={`chat-box ${!chatOpen ? "hidden" : ""}`}>
+        <div className="chat-header" onClick={() => setChatOpen(!chatOpen)}>
+          {chatOpen ? "Tutup Chat" : "Buka Chat"}
+        </div>
+        {chatOpen && (
+          <>
+            <div className="chat-messages">
+              {messages.map((m, i) => (
+                <div key={i}>
+                  <strong>{m.by}:</strong> {m.text}
+                </div>
+              ))}
+            </div>
+            <form className="chat-input" onSubmit={sendMessage}>
+              <input name="msg" placeholder="Ketik pesan..." />
+              <button type="submit">Kirim</button>
+            </form>
+          </>
+        )}
       </div>
-      <form className="chat-input" onSubmit={sendMessage}>
-        <input name="msg" placeholder="Ketik pesan..." />
-        <button type="submit">Kirim</button>
-      </form>
-    </>
-  )}
-</div>
-        
 
       <section>
         <h3>Room Info</h3>
@@ -280,4 +316,4 @@ onValue(chatRef, (snap) => {
       </section>
     </main>
   );
-    }
+      }
