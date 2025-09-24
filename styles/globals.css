@@ -15,10 +15,3 @@ html, body {
   justify-content: center;
   align-items: center;
 }
-
-/* Container utama */
-.container {
-  width: 100%;
- /* max-width: 500px;*/
-  padding: 16px;
-}
