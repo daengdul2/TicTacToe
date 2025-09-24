@@ -67,6 +67,7 @@ input {
   grid-template-columns: repeat(3, 1fr);
   gap: 6px;
   margin-top: 16px;
+  width:100%
 }
 
 .cell {
