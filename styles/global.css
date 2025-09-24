@@ -166,15 +166,6 @@ input:focus {
   border: 1px solid #333;
 }
 
-.chat-header {
-  background: #0077ff;
-  color: white;
-  padding: 12px;
-  font-weight: bold;
-  text-align: center;
-  cursor: pointer;
-}
-
 .chat-messages {
   flex: 1;
   padding: 10px;
