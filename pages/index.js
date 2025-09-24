@@ -1,7 +1,7 @@
 // pages/index.js
 import { useEffect, useState, useRef } from 'react';
 import { db, auth, signInAnonymously, onAuthStateChanged } from '../lib/firebase';
-import { ref, onValue, set, update, push, get } from 'firebase/database';
+import { ref, onValue, set, update, push, get, remove } from 'firebase/database'; // Tambah 'remove' untuk hapus room
 
 // Utility: check winner
 function checkWinner(board) {
@@ -37,16 +37,36 @@ export default function Home() {
 
   useEffect(() => {
     const roomsRef = ref(db, 'rooms');
-    const unsub = onValue(roomsRef, snapshot => {
+    const unsub = onValue(roomsRef, async (snapshot) => {
       const data = snapshot.val() || {};
-      const arr = Object.keys(data).map(id => {
+      const roomIds = Object.keys(data);
+
+      // Perbaikan baru: Otomatis hapus rooms yang kosong (tidak ada playerX dan playerO)
+      // Ini dijalankan di setiap update rooms untuk cleanup
+      for (const id of roomIds) {
         const r = data[id] || {};
-        return {
-          id,
-          playersCount: (r.playerX ? 1 : 0) + (r.playerO ? 1 : 0),
-          status: r.status || 'waiting'
-        };
-      });
+        if (!r.playerX && !r.playerO) {
+          try {
+            const emptyRoomRef = ref(db, `rooms/${id}`);
+            await remove(emptyRoomRef); // Hapus room kosong
+            console.log(`Auto-deleted empty room: ${id}`);
+          } catch (err) {
+            console.error(`Failed to delete empty room ${id}:`, err);
+          }
+        }
+      }
+
+      // Rebuild list setelah cleanup (snapshot mungkin outdated, tapi onValue akan trigger ulang)
+      const arr = roomIds
+        .filter(id => data[id]) // Filter yang masih ada setelah potensi hapus
+        .map(id => {
+          const r = data[id] || {};
+          return {
+            id,
+            playersCount: (r.playerX ? 1 : 0) + (r.playerO ? 1 : 0),
+            status: r.status || 'waiting'
+          };
+        });
       setRoomsList(arr);
     });
     return () => unsub();
@@ -84,8 +104,35 @@ export default function Home() {
     };
   }, [roomId]);
 
+  // Fungsi helper baru: Check apakah user sudah punya room aktif
+  async function hasActiveRoom(userUid) {
+    if (!userUid) return false;
+    try {
+      const roomsRef = ref(db, 'rooms');
+      const snapshot = await get(roomsRef);
+      const data = snapshot.val() || {};
+      for (const roomData of Object.values(data)) {
+        if (roomData.playerX === userUid || roomData.playerO === userUid) {
+          return true;
+        }
+      }
+      return false;
+    } catch (err) {
+      console.error('Error checking active rooms:', err);
+      return false; // Asumsi tidak ada jika error
+    }
+  }
+
   async function createRoom() {
     if (!user) return alert('Signing in... coba lagi sebentar.');
+    
+    // Perbaikan baru: Check apakah user sudah punya room aktif
+    const hasRoom = await hasActiveRoom(user.uid);
+    if (hasRoom) {
+      alert('Anda sudah berada di room aktif. Leave room terlebih dahulu sebelum membuat yang baru.');
+      return;
+    }
+
     try {
       const rref = push(ref(db, 'rooms'));
       const id = rref.key;
@@ -211,14 +258,14 @@ export default function Home() {
       if (isPlayerX) updates.playerX = null;
       if (isPlayerO) updates.playerO = null;
 
-      const remainingPlayers = (updates.playerX === null ? 0 : 1) + (updates.playerO === null ? 0 : 1);
+      const remainingPlayers = (data.playerX && !isPlayerX ? 1 : 0) + (data.playerO && !isPlayerO ? 1 : 0);
       
       // Perbaikan: Set status ke 'waiting' jika satu player tersisa
       if (remainingPlayers === 1) {
         updates.status = 'waiting';
         await update(r, updates);
       } else if (remainingPlayers === 0) {
-        await set(r, null);
+        await remove(r); // Gunakan remove untuk hapus room (lebih eksplisit daripada set(null))
       } else {
         // Jika kedua masih ada (tidak mungkin di sini), update saja
         await update(r, updates);
@@ -311,4 +358,4 @@ export default function Home() {
       </section>
     </main>
   );
-  }
+    }
