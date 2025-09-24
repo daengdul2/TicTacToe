@@ -152,17 +152,20 @@ export default function Home() {
   if (status !== 'playing' && status !== 'waiting') return;
   if (!playerSymbol) return alert('Kamu belum ditetapkan sebagai pemain di room ini');
   if (playerSymbol !== turn) return; // not your turn
-  if (board[idx]) return;
 
-  // pastikan board adalah array
-  const safeBoard = Array.isArray(board) ? board.slice() : Array(9).fill(null);
+  // ❗ Ubah di sini: Cek apakah board[idx] BUKAN string kosong
+  if (board[idx] !== '') return; 
+
+  // ❗ Ubah di sini: Gunakan '' sebagai nilai default, bukan null
+  const safeBoard = Array.isArray(board) ? board.slice() : Array(9).fill('');
   safeBoard[idx] = playerSymbol;
 
-  const winner = checkWinner(safeBoard);
+  // Pastikan fungsi checkWinner juga mengenali '' sebagai kotak kosong
+  const winner = checkWinner(safeBoard); 
   const roomRef = ref(db, `rooms/${roomId}`);
 
   const updateObj = {
-    board: safeBoard,   // ✅ array dijamin
+    board: safeBoard,   // ✅ Sekarang akan tersimpan dengan benar
     turn: playerSymbol === 'X' ? 'O' : 'X',
     lastMove: { by: user.uid, idx, at: Date.now() }
   };
@@ -173,6 +176,7 @@ export default function Home() {
 
   await update(roomRef, updateObj);
 }
+
 
   async function resetRoom() {
     if (!roomId) return;
