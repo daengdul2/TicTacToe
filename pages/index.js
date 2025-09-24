@@ -1,72 +1,46 @@
 // pages/index.js
-import { useEffect, useState, useRef } from 'react';
-import { db, auth, signInAnonymously, onAuthStateChanged } from '../lib/firebase';
-import { ref, onValue, set, update, push, get } from 'firebase/database';
-
-// Utility: check winner
-function checkWinner(board) {
-  const lines = [
-    [0,1,2],[3,4,5],[6,7,8],
-    [0,3,6],[1,4,7],[2,5,8],
-    [0,4,8],[2,4,6]
-  ];
-  for (const [a,b,c] of lines) {
-    if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
-  }
-  return board.every(Boolean) ? 'draw' : null;
-}
+import { useState, useEffect, useRef } from "react";
+import { db, auth } from "../lib/firebase";
+import {
+  ref,
+  set,
+  update,
+  onValue,
+  get,
+} from "firebase/database";
+import { signInAnonymously } from "firebase/auth";
 
 export default function Home() {
-  const [user, setUser] = useState(null); 
-  const [roomId, setRoomId] = useState('');
-  const [playerSymbol, setPlayerSymbol] = useState(null); 
-  const [board, setBoard] = useState(Array(9).fill(null));
-  const [turn, setTurn] = useState('X');
-  const [status, setStatus] = useState('idle');
-  const [roomsList, setRoomsList] = useState([]);
-  const roomRefLive = useRef(null);
+  const [user, setUser] = useState(null);
+  const [roomId, setRoomId] = useState("");
   const [roomInfo, setRoomInfo] = useState(null);
+  const [board, setBoard] = useState(Array(9).fill(null));
+  const [playerSymbol, setPlayerSymbol] = useState(null);
+  const [turn, setTurn] = useState("X");
+  const [status, setStatus] = useState("idle");
 
-  // auth: sign in anonymously
+  const roomRefLive = useRef(null);
+
+  // Auto login anonymous
   useEffect(() => {
-    signInAnonymously(auth).catch(() => {});
-    const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
+    signInAnonymously(auth).then((res) => {
+      setUser(res.user);
     });
-    return () => unsub();
   }, []);
 
-  // listen rooms list
+  // Listener room realtime
   useEffect(() => {
-    const roomsRef = ref(db, 'rooms');
-    const unsub = onValue(roomsRef, snapshot => {
-      const data = snapshot.val() || {};
-      const arr = Object.keys(data).map(id => {
-        const r = data[id] || {};
-        return {
-          id,
-          playersCount: (r.playerX ? 1 : 0) + (r.playerO ? 1 : 0),
-          status: r.status || 'waiting'
-        };
-      });
-      setRoomsList(arr);
-    });
-    return () => unsub();
-  }, []);
-
-  // live room listener
-  useEffect(() => {
-    if (roomRefLive.current) roomRefLive.current(); 
+    if (roomRefLive.current) roomRefLive.current(); // unsubscribe
     if (!roomId) {
       setRoomInfo(null);
       setBoard(Array(9).fill(null));
-      setTurn('X');
-      setStatus('idle');
+      setTurn("X");
+      setStatus("idle");
       return;
     }
 
     const rref = ref(db, `rooms/${roomId}`);
-    const unsub = onValue(rref, snap => {
+    const unsub = onValue(rref, (snap) => {
       const data = snap.val();
       if (!data) {
         setRoomInfo(null);
@@ -74,13 +48,20 @@ export default function Home() {
       }
 
       setRoomInfo(data);
-      setBoard(data.board || Array(9).fill(null));
-      setTurn(data.turn || 'X');
-      setStatus(data.status || 'waiting');
+
+      // Pastikan board selalu array
+      let boardFromDb = data.board || Array(9).fill(null);
+      if (!Array.isArray(boardFromDb)) {
+        boardFromDb = Object.values(boardFromDb);
+      }
+      setBoard(boardFromDb);
+
+      setTurn(data.turn || "X");
+      setStatus(data.status || "waiting");
 
       if (user) {
-        if (data.playerX === user.uid) setPlayerSymbol('X');
-        else if (data.playerO === user.uid) setPlayerSymbol('O');
+        if (data.playerX === user.uid) setPlayerSymbol("X");
+        else if (data.playerO === user.uid) setPlayerSymbol("O");
         else setPlayerSymbol(null);
       }
     });
@@ -92,173 +73,120 @@ export default function Home() {
     };
   }, [roomId, user]);
 
-  async function createRoom() {
-    if (!user) return alert('Signing in... coba lagi sebentar.');
-    const rref = push(ref(db, 'rooms'));
-    const id = rref.key;
-    const initial = {
-      board: Array(9).fill(null),
-      turn: 'X',
-      status: 'waiting',
-      playerX: user.uid,
-      createdAt: Date.now()
-    };
-    await set(rref, initial);
-    setRoomId(id);
-    setPlayerSymbol('X');
-  }
-
-  async function joinRoom(id) {
-    if (!user) return alert('Signing in... coba lagi sebentar.');
-    const r = ref(db, `rooms/${id}`);
-    const snap = await get(r);
-    if (!snap.exists()) return alert('Room not found');
-    const data = snap.val();
-
-    if (data.playerX === user.uid || data.playerO === user.uid) {
-      setRoomId(id);
-      setPlayerSymbol(data.playerX === user.uid ? 'X' : 'O');
-      return;
-    }
-
-    if (!data.playerO) {
-      await update(r, { playerO: user.uid, status: 'playing' });
-      setPlayerSymbol('O');
-      setRoomId(id);
-    } else if (!data.playerX) {
-      await update(r, { playerX: user.uid, status: 'playing' });
-      setPlayerSymbol('X');
-      setRoomId(id);
-    } else {
-      alert('Room penuh');
-    }
-  }
-
-  async function makeMove(idx) {
+  // Buat room
+  const createRoom = async () => {
     if (!user) return;
-    if (!roomId) return;
-    if (status !== 'playing' && status !== 'waiting') return;
-    if (!playerSymbol) return;
-    if (playerSymbol !== turn) return; 
-    if (board[idx]) return;
+    const newRoomId = Math.random().toString(36).substring(2, 8);
+    await set(ref(db, `rooms/${newRoomId}`), {
+      playerX: user.uid,
+      turn: "X",
+      status: "waiting",
+      board: Array(9).fill(null),
+    });
+    setRoomId(newRoomId);
+  };
 
-    const nextBoard = board.slice();
-    nextBoard[idx] = playerSymbol;
-    const winner = checkWinner(nextBoard);
-    const roomRef = ref(db, `rooms/${roomId}`);
-
-    const updateObj = { board: nextBoard, turn: playerSymbol === 'X' ? 'O' : 'X' };
-    if (winner) updateObj.status = winner === 'draw' ? 'draw' : `${winner}-won`;
-    updateObj.lastMove = { by: user.uid, idx, at: Date.now() };
-
-    await update(roomRef, updateObj);
-  }
-
-  async function resetRoom() {
-    if (!roomId || !user) return;
-    if (!roomInfo) return;
-    if (roomInfo.playerX !== user.uid && roomInfo.playerO !== user.uid) {
-      return alert('Hanya pemain di room yang dapat mereset.');
-    }
-    const roomRef = ref(db, `rooms/${roomId}`);
-    await update(roomRef, { board: Array(9).fill(null), turn: 'X', status: 'playing' });
-  }
-
-  async function leaveRoom() {
-    if (!roomId || !user) return;
-    const r = ref(db, `rooms/${roomId}`);
-    const snap = await get(r);
-    if (!snap.exists()) {
-      setRoomId('');
-      setPlayerSymbol(null);
-      return;
-    }
-    const data = snap.val();
-    const updates = {};
-    if (data.playerX === user.uid) updates.playerX = null;
-    if (data.playerO === user.uid) updates.playerO = null;
-
-    if ((!data.playerX || data.playerX === user.uid) && (!data.playerO || data.playerO === user.uid)) {
-      await set(r, null);
+  // Join room
+  const joinRoom = async (rid) => {
+    if (!user || !rid) return;
+    const rref = ref(db, `rooms/${rid}`);
+    const snap = await get(rref);
+    if (snap.exists()) {
+      const data = snap.val();
+      if (!data.playerO && data.playerX !== user.uid) {
+        await update(rref, { playerO: user.uid, status: "playing" });
+      }
+      setRoomId(rid);
     } else {
-      await update(r, updates);
+      alert("Room tidak ditemukan");
     }
-    setRoomId('');
-    setPlayerSymbol(null);
-  }
+  };
+
+  // Klik papan
+  const makeMove = (index) => {
+    if (!roomId || !user || status !== "playing") return;
+    if (board[index]) return; // sudah terisi
+    if (turn !== playerSymbol) return; // bukan giliranmu
+
+    const newBoard = [...board];
+    newBoard[index] = playerSymbol;
+
+    const newStatus = checkWinner(newBoard);
+
+    update(ref(db, `rooms/${roomId}`), {
+      board: newBoard, // simpan seluruh array!
+      turn: playerSymbol === "X" ? "O" : "X",
+      status: newStatus,
+    });
+  };
+
+  // Cek pemenang
+  const checkWinner = (b) => {
+    const lines = [
+      [0,1,2],[3,4,5],[6,7,8], // baris
+      [0,3,6],[1,4,7],[2,5,8], // kolom
+      [0,4,8],[2,4,6],         // diagonal
+    ];
+    for (let [a,bIdx,c] of lines) {
+      if (b[a] && b[a] === b[bIdx] && b[a] === b[c]) {
+        return `${b[a]} menang`;
+      }
+    }
+    if (b.every(Boolean)) return "seri";
+    return "playing";
+  };
 
   return (
-    <main style={{ fontFamily: 'Inter, system-ui, sans-serif', padding: 24 }}>
-      <h1>TicTacToe — Online (Vercel + Firebase Auth)</h1>
+    <div className="p-4">
+      <h1 className="text-2xl mb-4">Tic Tac Toe Online</h1>
+      {!roomId && (
+        <div>
+          <button
+            onClick={createRoom}
+            className="px-4 py-2 bg-blue-500 text-white rounded"
+          >
+            Buat Room
+          </button>
+          <div className="mt-2">
+            <input
+              type="text"
+              placeholder="Masukkan Room ID"
+              id="joinInput"
+              className="border px-2 py-1"
+            />
+            <button
+              onClick={() =>
+                joinRoom(document.getElementById("joinInput").value)
+              }
+              className="ml-2 px-3 py-1 bg-green-500 text-white rounded"
+            >
+              Join
+            </button>
+          </div>
+        </div>
+      )}
 
-      <div style={{ marginBottom: 12 }}>
-        <div>User: {user ? user.uid.substring(0,8) : '... signing in'}</div>
-      </div>
+      {roomId && (
+        <div>
+          <p>Room ID: {roomId}</p>
+          <p>Giliran: {turn}</p>
+          <p>Status: {status}</p>
+          <p>Kamu: {playerSymbol || "penonton"}</p>
 
-      <div style={{ marginTop: 8 }}>
-        <button onClick={createRoom}>Create Room (become X)</button>
-        <button style={{ marginLeft: 8 }} onClick={() => {
-          const avail = roomsList.find(r => r.playersCount < 2);
-          if (avail) joinRoom(avail.id);
-          else alert('Tidak ada room kosong saat ini');
-        }}>Quick Join</button>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <strong>Available Rooms</strong>
-        <ul>
-          {roomsList.length === 0 && <li>(no rooms)</li>}
-          {roomsList.map(r => (
-            <li key={r.id}>
-              <button onClick={() => joinRoom(r.id)}>{r.id}</button>
-              {' '}({r.status}) — players: {r.playersCount}
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div style={{ marginTop: 12 }}>
-        <label>Room ID: <input value={roomId} onChange={e => setRoomId(e.target.value)} /></label>
-        <button onClick={() => joinRoom(roomId)}>Join</button>
-        <button style={{ marginLeft: 8 }} onClick={leaveRoom}>Leave Room</button>
-      </div>
-
-      <div style={{ marginTop: 20 }}>
-        <div>Player: {playerSymbol || '-'} | Turn: {turn} | Status: {status}</div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 80px)', gap: 8, marginTop: 12 }}>
-          {board.map((cell, i) => {
-            const disabled = !(playerSymbol && playerSymbol === turn && !cell && (status === 'playing' || status === 'waiting'));
-            return (
+          <div className="grid grid-cols-3 gap-2 mt-4">
+            {board.map((cell, i) => (
               <button
                 key={i}
                 onClick={() => makeMove(i)}
-                style={{ height: 80, fontSize: 32 }}
-                disabled={disabled}
+                disabled={!!cell || turn !== playerSymbol || status !== "playing"}
+                className="w-16 h-16 border flex items-center justify-center text-xl"
               >
                 {cell}
               </button>
-            );
-          })}
+            ))}
+          </div>
         </div>
-
-        <div style={{ marginTop: 12 }}>
-          <button onClick={resetRoom}>Reset</button>
-        </div>
-      </div>
-
-      <section style={{ marginTop: 24 }}>
-        <h3>Room Info (debug)</h3>
-        <pre style={{ background: '#f5f5f5', padding: 8 }}>
-          {roomInfo ? JSON.stringify({
-            id: roomId,
-            playerX: roomInfo.playerX ? roomInfo.playerX.substring(0,8) : null,
-            playerO: roomInfo.playerO ? roomInfo.playerO.substring(0,8) : null,
-            status: roomInfo.status,
-            turn: roomInfo.turn
-          }, null, 2) : '(no room selected)'}
-        </pre>
-      </section>
-    </main>
+      )}
+    </div>
   );
-                }
+}
