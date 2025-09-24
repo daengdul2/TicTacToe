@@ -90,3 +90,55 @@ pre {
     padding: 8px 12px;
   }
 }
+
+.chat-box {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  width: 260px;
+  max-height: 50vh;
+  background: rgba(0,0,0,0.7);
+  border: 1px solid #fff3;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+}
+
+.chat-header {
+  background: rgba(255,255,255,0.1);
+  padding: 8px;
+  cursor: pointer;
+  text-align: center;
+  font-weight: bold;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+  font-size: 14px;
+}
+
+.chat-input {
+  display: flex;
+  border-top: 1px solid #fff3;
+}
+
+.chat-input input {
+  flex: 1;
+  border: none;
+  padding: 6px;
+}
+
+.chat-input button {
+  border: none;
+  background: #2a5298;
+  color: #fff;
+  padding: 6px 10px;
+}
+
+.chat-box.hidden {
+  transform: translateY(90%);
+}
