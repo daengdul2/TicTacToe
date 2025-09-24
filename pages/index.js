@@ -206,7 +206,7 @@ export default function Home() {
 
   return (
     <main style={{ fontFamily: 'Inter, system-ui, sans-serif', padding: 24 }}>
-      <h1>TicTacToe â€” Online (Vercel + Firebase Auth)</h1>
+      <h1>TicTacToe Online (Vercel + Firebase Auth)</h1>
 
       <div style={{ marginBottom: 12 }}>
         <div>User: {user ? user.uid.substring(0,8) : '... signing in'}</div>
