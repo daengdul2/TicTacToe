@@ -19,6 +19,6 @@ html, body {
 /* Container utama */
 .container {
   width: 100%;
-  max-width: 500px;
+ /* max-width: 500px;*/
   padding: 16px;
 }
