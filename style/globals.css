@@ -1,0 +1,146 @@
+/* Reset & base style */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  background: linear-gradient(135deg, #1e3c72, #2a5298);
+  color: #fff;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* Container utama */
+.container {
+  width: 100%;
+  max-width: 500px;
+  padding: 16px;
+}
+
+/* Menu Utama */
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.menu button {
+  background: #ffffff20;
+  border: 2px solid #ffffff50;
+  border-radius: 12px;
+  padding: 14px;
+  font-size: 18px;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.menu button:hover {
+  background: #ffffff40;
+}
+
+/* Game board */
+.board {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin: 20px auto;
+  max-width: 300px;
+}
+
+.cell {
+  width: 100px;
+  height: 100px;
+  background: #ffffff20;
+  border-radius: 10px;
+  font-size: 2.5rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.cell:hover {
+  background: #ffffff40;
+}
+
+/* Chat box melayang */
+.chat-container {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  width: 260px;
+  max-height: 50vh;
+  background: #111a;
+  border: 1px solid #fff3;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: transform 0.3s ease;
+}
+
+.chat-header {
+  background: #222a;
+  padding: 10px;
+  cursor: pointer;
+  text-align: center;
+  font-weight: bold;
+}
+
+.chat-body {
+  flex: 1;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.chat-input {
+  display: flex;
+  border-top: 1px solid #fff3;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  outline: none;
+}
+
+.chat-input button {
+  background: #2a5298;
+  color: #fff;
+  border: none;
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+/* Toggle chat (hide) */
+.chat-container.hidden {
+  transform: translateY(90%);
+}
+
+/* Mobile responsiveness */
+@media (max-width: 600px) {
+  .board {
+    max-width: 240px;
+  }
+
+  .cell {
+    width: 80px;
+    height: 80px;
+    font-size: 2rem;
+  }
+
+  .chat-container {
+    width: 90%;
+    right: 5%;
+  }
+}
