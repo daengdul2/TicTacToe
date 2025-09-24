@@ -12,12 +12,12 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
+  min-height: 100vh;
 }
 
 /* ==== WRAPPER UTAMA ==== */
 main {
   width: 100%;
-  max-width: 480px;
   margin: 0 auto;
   padding: 16px;
   background: rgba(30, 30, 30, 0.95);
