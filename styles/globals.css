@@ -15,3 +15,6 @@ html, body {
   justify-content: center;
   align-items: center;
 }
+.container{
+  padding:30px;
+}
