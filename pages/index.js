@@ -17,9 +17,9 @@ function checkWinner(board) {
 }
 
 export default function Home() {
-  const [user, setUser] = useState(null); // firebase user
+  const [user, setUser] = useState(null); 
   const [roomId, setRoomId] = useState('');
-  const [playerSymbol, setPlayerSymbol] = useState(null); // 'X' or 'O'
+  const [playerSymbol, setPlayerSymbol] = useState(null); 
   const [board, setBoard] = useState(Array(9).fill(null));
   const [turn, setTurn] = useState('X');
   const [status, setStatus] = useState('idle');
@@ -27,20 +27,11 @@ export default function Home() {
   const roomRefLive = useRef(null);
   const [roomInfo, setRoomInfo] = useState(null);
 
-  // auth: sign in anonymously if not signed in
+  // auth: sign in anonymously
   useEffect(() => {
-    // try sign-in
-    signInAnonymously(auth).catch(err => {
-      // if already signed in or error, ignore; onAuthStateChanged will handle
-      // console.log('anon signIn error', err);
-    });
-
+    signInAnonymously(auth).catch(() => {});
     const unsub = onAuthStateChanged(auth, (u) => {
-      if (u) {
-        setUser(u);
-      } else {
-        setUser(null);
-      }
+      setUser(u || null);
     });
     return () => unsub();
   }, []);
@@ -63,36 +54,37 @@ export default function Home() {
     return () => unsub();
   }, []);
 
-  // live room listener when roomId changes
+  // live room listener
   useEffect(() => {
-    if (roomRefLive.current) roomRefLive.current(); // unsubscribe previous if any
+    if (roomRefLive.current) roomRefLive.current(); 
     if (!roomId) {
       setRoomInfo(null);
+      setBoard(Array(9).fill(null));
+      setTurn('X');
+      setStatus('idle');
       return;
     }
+
     const rref = ref(db, `rooms/${roomId}`);
     const unsub = onValue(rref, snap => {
       const data = snap.val();
       if (!data) {
         setRoomInfo(null);
-        setBoard(Array(9).fill(null));
-        setTurn('X');
-        setStatus('idle');
         return;
       }
+
       setRoomInfo(data);
       setBoard(data.board || Array(9).fill(null));
       setTurn(data.turn || 'X');
       setStatus(data.status || 'waiting');
 
-      // assign symbol by comparing authenticated uid with room players
       if (user) {
         if (data.playerX === user.uid) setPlayerSymbol('X');
         else if (data.playerO === user.uid) setPlayerSymbol('O');
         else setPlayerSymbol(null);
       }
     });
-    // store unsub
+
     roomRefLive.current = unsub;
     return () => {
       if (roomRefLive.current) roomRefLive.current();
@@ -100,7 +92,6 @@ export default function Home() {
     };
   }, [roomId, user]);
 
-  // create a room (creator becomes X)
   async function createRoom() {
     if (!user) return alert('Signing in... coba lagi sebentar.');
     const rref = push(ref(db, 'rooms'));
@@ -117,7 +108,6 @@ export default function Home() {
     setPlayerSymbol('X');
   }
 
-  // join room (takes O if free, else X if free)
   async function joinRoom(id) {
     if (!user) return alert('Signing in... coba lagi sebentar.');
     const r = ref(db, `rooms/${id}`);
@@ -125,7 +115,6 @@ export default function Home() {
     if (!snap.exists()) return alert('Room not found');
     const data = snap.val();
 
-    // prevent joining same room twice
     if (data.playerX === user.uid || data.playerO === user.uid) {
       setRoomId(id);
       setPlayerSymbol(data.playerX === user.uid ? 'X' : 'O');
@@ -145,13 +134,12 @@ export default function Home() {
     }
   }
 
-  // make move — only allowed if user is the player whose turn it is
   async function makeMove(idx) {
-    if (!user) return alert('Not signed in yet');
-    if (!roomId) return alert('Join a room first');
+    if (!user) return;
+    if (!roomId) return;
     if (status !== 'playing' && status !== 'waiting') return;
-    if (!playerSymbol) return alert('Kamu belum ditetapkan sebagai pemain di room ini');
-    if (playerSymbol !== turn) return; // not your turn
+    if (!playerSymbol) return;
+    if (playerSymbol !== turn) return; 
     if (board[idx]) return;
 
     const nextBoard = board.slice();
@@ -161,25 +149,21 @@ export default function Home() {
 
     const updateObj = { board: nextBoard, turn: playerSymbol === 'X' ? 'O' : 'X' };
     if (winner) updateObj.status = winner === 'draw' ? 'draw' : `${winner}-won`;
-
-    // also optionally store lastMove info
     updateObj.lastMove = { by: user.uid, idx, at: Date.now() };
 
     await update(roomRef, updateObj);
   }
 
   async function resetRoom() {
-    if (!roomId) return;
-    const roomRef = ref(db, `rooms/${roomId}`);
-    // only allow reset if you're a participant
+    if (!roomId || !user) return;
     if (!roomInfo) return;
     if (roomInfo.playerX !== user.uid && roomInfo.playerO !== user.uid) {
       return alert('Hanya pemain di room yang dapat mereset.');
     }
+    const roomRef = ref(db, `rooms/${roomId}`);
     await update(roomRef, { board: Array(9).fill(null), turn: 'X', status: 'playing' });
   }
 
-  // leave room (clear player's slot)
   async function leaveRoom() {
     if (!roomId || !user) return;
     const r = ref(db, `rooms/${roomId}`);
@@ -193,11 +177,10 @@ export default function Home() {
     const updates = {};
     if (data.playerX === user.uid) updates.playerX = null;
     if (data.playerO === user.uid) updates.playerO = null;
-    // if no players left, remove room entirely
+
     if ((!data.playerX || data.playerX === user.uid) && (!data.playerO || data.playerO === user.uid)) {
       await set(r, null);
     } else {
-      // set fields to null removes them; use update with explicit null
       await update(r, updates);
     }
     setRoomId('');
@@ -215,7 +198,6 @@ export default function Home() {
       <div style={{ marginTop: 8 }}>
         <button onClick={createRoom}>Create Room (become X)</button>
         <button style={{ marginLeft: 8 }} onClick={() => {
-          // quick join: join first available room with vacancy
           const avail = roomsList.find(r => r.playersCount < 2);
           if (avail) joinRoom(avail.id);
           else alert('Tidak ada room kosong saat ini');
@@ -253,7 +235,6 @@ export default function Home() {
                 onClick={() => makeMove(i)}
                 style={{ height: 80, fontSize: 32 }}
                 disabled={disabled}
-                title={disabled ? 'Tidak bisa klik sekarang' : 'Klik untuk gerak'}
               >
                 {cell}
               </button>
@@ -277,8 +258,7 @@ export default function Home() {
             turn: roomInfo.turn
           }, null, 2) : '(no room selected)'}
         </pre>
-        <p>Note: Buka dua jendela/incognito/browser/device — buat room di satu, lalu join di yang lain.</p>
       </section>
     </main>
   );
-      }
+                }
