@@ -150,6 +150,9 @@ input:focus {
 }
 
 /* ==== CHAT BOX ==== */
+.hidden {
+  display: none !important;
+}
 .chat-box {
   position: fixed;
   bottom: 90px;
