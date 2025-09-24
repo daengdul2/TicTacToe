@@ -147,26 +147,32 @@ export default function Home() {
 
   // make move — only allowed if user is the player whose turn it is
   async function makeMove(idx) {
-    if (!user) return alert('Not signed in yet');
-    if (!roomId) return alert('Join a room first');
-    if (status !== 'playing' && status !== 'waiting') return;
-    if (!playerSymbol) return alert('Kamu belum ditetapkan sebagai pemain di room ini');
-    if (playerSymbol !== turn) return; // not your turn
-    if (board[idx]) return;
+  if (!user) return alert('Not signed in yet');
+  if (!roomId) return alert('Join a room first');
+  if (status !== 'playing' && status !== 'waiting') return;
+  if (!playerSymbol) return alert('Kamu belum ditetapkan sebagai pemain di room ini');
+  if (playerSymbol !== turn) return; // not your turn
+  if (board[idx]) return;
 
-    const nextBoard = board.slice();
-    nextBoard[idx] = playerSymbol;
-    const winner = checkWinner(nextBoard);
-    const roomRef = ref(db, `rooms/${roomId}`);
+  // pastikan board adalah array
+  const safeBoard = Array.isArray(board) ? board.slice() : Array(9).fill(null);
+  safeBoard[idx] = playerSymbol;
 
-    const updateObj = { board: nextBoard, turn: playerSymbol === 'X' ? 'O' : 'X' };
-    if (winner) updateObj.status = winner === 'draw' ? 'draw' : `${winner}-won`;
+  const winner = checkWinner(safeBoard);
+  const roomRef = ref(db, `rooms/${roomId}`);
 
-    // also optionally store lastMove info
-    updateObj.lastMove = { by: user.uid, idx, at: Date.now() };
+  const updateObj = {
+    board: safeBoard,   // ✅ array dijamin
+    turn: playerSymbol === 'X' ? 'O' : 'X',
+    lastMove: { by: user.uid, idx, at: Date.now() }
+  };
 
-    await update(roomRef, updateObj);
+  if (winner) {
+    updateObj.status = winner === 'draw' ? 'draw' : `${winner}-won`;
   }
+
+  await update(roomRef, updateObj);
+}
 
   async function resetRoom() {
     if (!roomId) return;
