@@ -12,7 +12,6 @@ body {
   display: flex;
   justify-content: center;
   align-items: flex-start;
-  min-height: 100vh;
 }
 
 /* ==== WRAPPER UTAMA ==== */
@@ -23,7 +22,6 @@ main {
   background: rgba(30, 30, 30, 0.95);
   border-radius: 12px 12px 0 0;
   box-shadow: 0 -2px 15px rgba(0,0,0,0.5);
-  min-height: 100vh;
   display: flex;
   flex-direction: column;
 }
