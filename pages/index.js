@@ -154,10 +154,10 @@ export default function Home() {
   if (playerSymbol !== turn) return; // not your turn
 
   // ❗ Ubah di sini: Cek apakah board[idx] BUKAN string kosong
-  if (board[idx] !== '') return; 
+  if (board[idx] !== '0') return; 
 
   // ❗ Ubah di sini: Gunakan '' sebagai nilai default, bukan null
-  const safeBoard = Array.isArray(board) ? board.slice() : Array(9).fill('');
+  const safeBoard = Array.isArray(board) ? board.slice() : Array(9).fill('0');
   safeBoard[idx] = playerSymbol;
 
   // Pastikan fungsi checkWinner juga mengenali '' sebagai kotak kosong
