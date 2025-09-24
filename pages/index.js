@@ -2,7 +2,6 @@ import { useEffect, useState, useRef } from 'react';
 import { db, auth, signInAnonymously, onAuthStateChanged } from '../lib/firebase';
 import { ref, onValue, set, update, push, get, remove } from 'firebase/database';
 import { checkWinner } from '../lib/gameLogic';
-import '../styles/global.css';
 
 export default function Home() {
   const [user, setUser] = useState(null);
