@@ -1,45 +1,64 @@
 import { useState, useEffect } from "react";
-import { initBotGame, handleBotMove } from "../public/js/logic";
+import { createRoom, joinRoom, listenRoom, makeMove, leaveRoom } from "../js/firebaseLogic";
+import { handleBotMove } from "../js/logic";
 
-export default function GameUI({ gameMode, onBack }) {
-  const [board, setBoard] = useState(Array(9).fill(null));
+export default function GameUI({ user, gameMode }) {
+  const [roomId, setRoomId] = useState("");
+  const [symbol, setSymbol] = useState(null);
+  const [board, setBoard] = useState(Array(9).fill(""));
   const [turn, setTurn] = useState("X");
-  const [status, setStatus] = useState("playing");
-  const [playerSymbol, setPlayerSymbol] = useState("X");
-  const [botDifficulty, setBotDifficulty] = useState("easy");
+  const [status, setStatus] = useState("idle");
 
   useEffect(() => {
     if (gameMode === "bot") {
-      initBotGame(setPlayerSymbol, setBotDifficulty);
       setStatus("playing");
     }
   }, [gameMode]);
 
-  const makeMove = (i) => {
-    if (board[i] || status !== "playing") return;
-    const next = [...board];
-    next[i] = turn;
-    setBoard(next);
-    setTurn(turn === "X" ? "O" : "X");
-
-    if (gameMode === "bot" && next[i] === playerSymbol) {
-      setTimeout(() => {
-        handleBotMove(next, setBoard, setTurn, playerSymbol, botDifficulty);
-      }, 500);
+  useEffect(() => {
+    if (roomId && gameMode !== "bot") {
+      const unsub = listenRoom(roomId, (data) => {
+        if (!data) {
+          setRoomId("");
+          setStatus("idle");
+          return;
+        }
+        setBoard(data.board || Array(9).fill(""));
+        setTurn(data.turn || "X");
+        setStatus(data.status || "waiting");
+      });
+      return () => unsub();
     }
-  };
+  }, [roomId, gameMode]);
+
+  async function handleMove(idx) {
+    if (gameMode === "bot") {
+      if (board[idx] || status !== "playing" || symbol !== turn) return;
+      const newBoard = [...board];
+      newBoard[idx] = symbol;
+      setBoard(newBoard);
+      setTurn(symbol === "X" ? "O" : "X");
+
+      setTimeout(() => {
+        const botBoard = handleBotMove(newBoard, turn === "X" ? "O" : "X", "easy");
+        setBoard(botBoard);
+        setTurn(symbol);
+      }, 800);
+    } else {
+      await makeMove(user, roomId, idx, board, symbol, turn);
+    }
+  }
 
   return (
-    <div className="game">
-      <h2>Status: {status}</h2>
-      <div className="board">
+    <div>
+      <h2>Mode: {gameMode}</h2>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 80px)", gap: "6px" }}>
         {board.map((cell, i) => (
-          <button key={i} className="cell" onClick={() => makeMove(i)}>
+          <button key={i} onClick={() => handleMove(i)} style={{ width: 80, height: 80, fontSize: 24 }}>
             {cell}
           </button>
         ))}
       </div>
-      <button onClick={onBack}>⬅️ Kembali</button>
     </div>
   );
 }
