@@ -17,7 +17,7 @@ function checkWinner(board) {
 }
 
 export default function Home() {
-  const [user, setUser] = useState(null);
+  const [user, setUser ] = useState(null);
   const [roomId, setRoomId] = useState('');
   const [playerSymbol, setPlayerSymbol] = useState(null);
   const [board, setBoard] = useState(Array(9).fill(''));
@@ -28,9 +28,9 @@ export default function Home() {
   const [roomInfo, setRoomInfo] = useState(null);
 
   useEffect(() => {
-    signInAnonymously(auth).catch(err => {});
+    signInAnonymously(auth).catch(err => console.error('Sign in error:', err));
     const unsub = onAuthStateChanged(auth, (u) => {
-      setUser(u || null);
+      setUser (u || null);
     });
     return () => unsub();
   }, []);
@@ -71,6 +71,7 @@ export default function Home() {
         setStatus(data.status || 'waiting');
         setRoomInfo(data);
       } else {
+        setRoomInfo(null); // Perbaikan: Set null untuk hindari lag
         setRoomId('');
         alert('Room tidak lagi tersedia.');
       }
@@ -85,55 +86,74 @@ export default function Home() {
 
   async function createRoom() {
     if (!user) return alert('Signing in... coba lagi sebentar.');
-    const rref = push(ref(db, 'rooms'));
-    const id = rref.key;
-    const initial = {
-      board: Array(9).fill(''),
-      turn: 'X',
-      status: 'waiting',
-      playerX: user.uid,
-      createdAt: Date.now()
-    };
-    await set(rref, initial);
-    setRoomId(id);
-    setPlayerSymbol('X');
+    try {
+      const rref = push(ref(db, 'rooms'));
+      const id = rref.key;
+      const initial = {
+        board: Array(9).fill(''),
+        turn: 'X',
+        status: 'waiting',
+        playerX: user.uid,
+        createdAt: Date.now()
+      };
+      await set(rref, initial);
+      setRoomId(id);
+      setPlayerSymbol('X');
+    } catch (err) {
+      console.error('Create room error:', err);
+      alert('Gagal membuat room: ' + err.message);
+    }
   }
 
   async function joinRoom(id) {
     if (!user) return alert('Signing in... coba lagi sebentar.');
-    const r = ref(db, `rooms/${id}`);
-    const snap = await get(r);
-    if (!snap.exists()) return alert('Room not found');
-    const data = snap.val();
+    if (!id || !id.trim()) return alert('Masukkan Room ID yang valid.'); // Perbaikan: Validasi input
 
-    if (data.playerX === user.uid || data.playerO === user.uid) {
+    try {
+      const r = ref(db, `rooms/${id}`);
+      const snap = await get(r);
+      if (!snap.exists()) return alert('Room not found');
+      const data = snap.val();
+
+      if (data.playerX === user.uid || data.playerO === user.uid) {
+        setRoomId(id);
+        setPlayerSymbol(data.playerX === user.uid ? 'X' : 'O');
+        return;
+      }
+
+      // Perbaikan: Logika join lebih ketat - prioritas O jika X ada, atau ambil X jika kosong total
+      if (!data.playerX && !data.playerO) {
+        // Ambil alih sebagai X jika room benar-benar kosong
+        await update(r, { playerX: user.uid, status: 'waiting' });
+        setPlayerSymbol('X');
+      } else if (!data.playerO && data.playerX) {
+        await update(r, { playerO: user.uid, status: 'playing' });
+        setPlayerSymbol('O');
+      } else {
+        alert('Room penuh atau tidak valid untuk join.');
+        return;
+      }
       setRoomId(id);
-      setPlayerSymbol(data.playerX === user.uid ? 'X' : 'O');
-      return;
+    } catch (err) {
+      console.error('Join room error:', err);
+      alert('Gagal join room: ' + err.message);
     }
-
-    if (!data.playerO) {
-      await update(r, { playerO: user.uid, status: 'playing' });
-      setPlayerSymbol('O');
-    } else if (!data.playerX) {
-      await update(r, { playerX: user.uid, status: 'playing' });
-      setPlayerSymbol('X');
-    } else {
-      alert('Room penuh');
-      return;
-    }
-    setRoomId(id);
   }
 
   async function makeMove(idx) {
     if (!user || !roomId || status !== 'playing' || !playerSymbol || playerSymbol !== turn || board[idx] !== '') return;
 
+    // Optimistic update untuk UX lebih baik
     const newBoard = [...board];
     newBoard[idx] = playerSymbol;
-
+    setBoard(newBoard);
     const winner = checkWinner(newBoard);
-    const roomRef = ref(db, `rooms/${roomId}`);
+    setTurn(playerSymbol === 'X' ? 'O' : 'X');
+    if (winner) {
+      setStatus(winner === 'draw' ? 'draw' : `${winner}-won`);
+    }
 
+    const roomRef = ref(db, `rooms/${roomId}`);
     const updateObj = {
       board: newBoard,
       turn: playerSymbol === 'X' ? 'O' : 'X',
@@ -144,18 +164,32 @@ export default function Home() {
       updateObj.status = winner === 'draw' ? 'draw' : `${winner}-won`;
     }
 
-    await update(roomRef, updateObj);
+    try {
+      await update(roomRef, updateObj);
+    } catch (err) {
+      console.error('Make move error:', err);
+      alert('Gagal update move: ' + err.message);
+      // Revert local state jika gagal
+      setBoard([...board]);
+      setTurn(playerSymbol); // Kembalikan turn
+      if (winner) setStatus('playing'); // Atau load ulang dari DB jika perlu
+    }
   }
 
-  // ✅ FUNGSI DENGAN LOGIKA BARU
+  // Fungsi dengan logika baru (sudah ada, tapi tambah error handling)
   async function resetRoom() {
     if (!roomId || !roomInfo || !user) return;
     // Hanya user yang merupakan playerX (pembuat room) yang bisa mereset.
     if (roomInfo.playerX !== user.uid) {
       return alert('Hanya pembuat room (Pemain X) yang dapat mereset permainan.');
     }
-    const roomRef = ref(db, `rooms/${roomId}`);
-    await update(roomRef, { board: Array(9).fill(''), turn: 'X', status: 'playing' });
+    try {
+      const roomRef = ref(db, `rooms/${roomId}`);
+      await update(roomRef, { board: Array(9).fill(''), turn: 'X', status: 'playing' });
+    } catch (err) {
+      console.error('Reset room error:', err);
+      alert('Gagal reset game: ' + err.message);
+    }
   }
 
   async function leaveRoom() {
@@ -164,24 +198,34 @@ export default function Home() {
     setRoomId('');
     setPlayerSymbol(null);
 
-    const r = ref(db, `rooms/${currentRoomId}`);
-    const snap = await get(r);
-    if (!snap.exists()) return;
+    try {
+      const r = ref(db, `rooms/${currentRoomId}`);
+      const snap = await get(r);
+      if (!snap.exists()) return;
 
-    const data = snap.val();
-    const updates = {};
-    let isPlayerX = data.playerX === user.uid;
-    let isPlayerO = data.playerO === user.uid;
+      const data = snap.val();
+      const updates = {};
+      let isPlayerX = data.playerX === user.uid;
+      let isPlayerO = data.playerO === user.uid;
 
-    if (isPlayerX) updates.playerX = null;
-    if (isPlayerO) updates.playerO = null;
+      if (isPlayerX) updates.playerX = null;
+      if (isPlayerO) updates.playerO = null;
 
-    const otherPlayerExists = isPlayerX ? !!data.playerO : !!data.playerX;
-    
-    if (!otherPlayerExists) {
-      await set(r, null);
-    } else {
-      await update(r, updates);
+      const remainingPlayers = (updates.playerX === null ? 0 : 1) + (updates.playerO === null ? 0 : 1);
+      
+      // Perbaikan: Set status ke 'waiting' jika satu player tersisa
+      if (remainingPlayers === 1) {
+        updates.status = 'waiting';
+        await update(r, updates);
+      } else if (remainingPlayers === 0) {
+        await set(r, null);
+      } else {
+        // Jika kedua masih ada (tidak mungkin di sini), update saja
+        await update(r, updates);
+      }
+    } catch (err) {
+      console.error('Leave room error:', err);
+      alert('Gagal leave room: ' + err.message);
     }
   }
 
@@ -196,7 +240,8 @@ export default function Home() {
       <div style={{ marginTop: 8 }}>
         <button onClick={createRoom}>Create Room (become X)</button>
         <button style={{ marginLeft: 8 }} onClick={() => {
-          const avail = roomsList.find(r => r.playersCount < 2);
+          // Perbaikan: Filter quick join untuk status 'waiting' dan playersCount < 2
+          const avail = roomsList.find(r => r.playersCount < 2 && r.status === 'waiting');
           if (avail) joinRoom(avail.id);
           else alert('Tidak ada room kosong saat ini');
         }}>Quick Join</button>
@@ -266,4 +311,4 @@ export default function Home() {
       </section>
     </main>
   );
-}
+  }
