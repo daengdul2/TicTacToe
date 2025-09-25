@@ -134,7 +134,6 @@ input:focus {
   padding: 18px;
   border-radius: 50%;
   font-size: 1.4rem;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
   cursor: pointer;
   z-index: 1000;
   transition: transform 0.2s;
@@ -151,9 +150,9 @@ input:focus {
 }
 .chat-box {
   position: fixed;
-  bottom: 90px;
+  bottom: 100px;
   right: 20px;
-  width: 320px;
+  width: 80%;
   max-height: 65vh;
   background: #1e1e1e;
   border-radius: 12px;
