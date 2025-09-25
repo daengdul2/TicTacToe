@@ -30,7 +30,27 @@ export default function GameUI({
         <>
           {/* Menu Awal */}
           <div>
-            <button onClick={createRoom}>Create Room (X)</button>
+        {/*  <button onClick={createRoom}>Create Room (X)</button>*/}
+<div>
+  <input
+    type="text"
+    placeholder="Custom Room ID"
+    value={customRoomId}
+    onChange={(e) => setCustomRoomId(e.target.value)}
+  />
+  
+  <select value={preferredSymbol} onChange={(e) => setPreferredSymbol(e.target.value)}>
+    <option value="X">Play as X</option>
+    <option value="O">Play as O</option>
+  </select>
+
+  <button onClick={() => createRoom(customRoomId, preferredSymbol)}>
+    Create Room
+  </button>
+</div>
+
+
+        
             <button
               onClick={() => {
                 const avail = roomsList.find(r => r.playersCount < 2);
