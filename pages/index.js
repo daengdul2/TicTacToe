@@ -15,6 +15,8 @@ export default function Home() {
   const [roomInfo, setRoomInfo] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [messages, setMessages] = useState([]);
+  const [customRoomId, setCustomRoomId] = useState("");
+const [preferredSymbol, setPreferredSymbol] = useState("X");
 
   const roomRefLive = useRef(null);
   const chatRefLive = useRef(null); // ✅ listener untuk chat
@@ -147,21 +149,53 @@ async function sendMessage(e) {
 }
 
   // 🔹 Buat room
-  async function createRoom() {
-    if (!user) return alert("Signing in... coba lagi.");
-    const rref = push(ref(db, "rooms"));
-    const id = rref.key;
-    const initial = {
-      board: Array(9).fill(""),
-      turn: "X",
-      status: "waiting",
-      playerX: user.uid,
-      createdAt: Date.now()
-    };
-    await set(rref, initial);
-    setRoomId(id);
-    setPlayerSymbol("X");
+ // async function createRoom() {
+ //   if (!user) return alert("Signing in... coba lagi.");
+//    const rref = push(ref(db, "rooms"));
+ //   const id = rref.key;
+//    const initial = {
+//      board: Array(9).fill(""),
+//      turn: "X",
+//      status: "waiting",
+//      playerX: user.uid,
+//      createdAt: Date.now()
+//    };
+//    await set(rref, initial);
+//    setRoomId(id);
+//    setPlayerSymbol("X");
+//  }
+
+  async function createRoom(customId, symbol) {
+  if (!user) return alert("Signing in... coba lagi.");
+  if (!customId) return alert("Room ID tidak boleh kosong");
+
+  const rref = ref(db, `rooms/${customId}`);
+  const snap = await get(rref);
+
+  if (snap.exists()) {
+    return alert("Room ID sudah dipakai, coba ID lain.");
   }
+
+  const initial = {
+    board: Array(9).fill(""),
+    turn: "X",
+    status: "waiting",
+    createdAt: Date.now(),
+  };
+
+  // set player sesuai pilihan
+  if (symbol === "X") {
+    initial.playerX = user.uid;
+  } else {
+    initial.playerO = user.uid;
+  }
+
+  await set(rref, initial);
+  setRoomId(customId);
+  setPlayerSymbol(symbol);
+  }
+
+  //batas
 
   // 🔹 Join room
   async function joinRoom(id) {
