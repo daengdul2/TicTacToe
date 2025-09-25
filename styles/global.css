@@ -151,7 +151,6 @@ input:focus {
 .chat-box {
   position: fixed;
   bottom: 100px;
-  margin: 20px;
   width: 80%;
   max-height: 65vh;
   background: #1e1e1e;
