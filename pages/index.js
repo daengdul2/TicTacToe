@@ -276,24 +276,29 @@ async function sendMessage(e) {
 
   return (
     <GameUI
-      user={user}
-      roomId={roomId}
-      roomsList={roomsList}
-      playerSymbol={playerSymbol}
-      turn={turn}
-      status={status}
-      board={board}
-      roomInfo={roomInfo}
-      chatOpen={chatOpen}
-      messages={messages}
-      setRoomId={setRoomId}
-      setChatOpen={setChatOpen}
-      createRoom={createRoom}
-      joinRoom={joinRoom}
-      leaveRoom={leaveRoom}
-      makeMove={makeMove}
-      resetRoom={resetRoom}
-      sendMessage={sendMessage}
-    />
+  user={user}
+  roomId={roomId}
+  roomsList={roomsList}
+  playerSymbol={playerSymbol}
+  turn={turn}
+  status={status}
+  board={board}
+  roomInfo={roomInfo}
+  chatOpen={chatOpen}
+  messages={messages}
+  setRoomId={setRoomId}
+  setChatOpen={setChatOpen}
+  createRoom={createRoom}
+  joinRoom={joinRoom}
+  leaveRoom={leaveRoom}
+  makeMove={makeMove}
+  resetRoom={resetRoom}
+  sendMessage={sendMessage}
+
+  customRoomId={customRoomId}
+  setCustomRoomId={setCustomRoomId}
+  preferredSymbol={preferredSymbol}
+  setPreferredSymbol={setPreferredSymbol}
+/>
   );
                    }
