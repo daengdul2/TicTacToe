@@ -152,7 +152,6 @@ input:focus {
   position: fixed;
   bottom: 100px;
   right: 0px;
-  margin:20px;
   width: 100%;
   max-height: 65vh;
   background: #1e1e1e;
@@ -160,6 +159,7 @@ input:focus {
   box-shadow: 0 6px 16px rgba(0,0,0,0.6);
   display: flex;
   flex-direction: column;
+  align-items:canter;
   overflow: hidden;
   z-index: 1000;
   border: 1px solid #333;
