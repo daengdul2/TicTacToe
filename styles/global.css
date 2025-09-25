@@ -152,7 +152,7 @@ input:focus {
   position: fixed;
   bottom: 100px;
   right: 0px;
-  margin:30px 20px 60px 20px
+  margin:20px;
   width: 100%;
   max-height: 65vh;
   background: #1e1e1e;
