@@ -17,11 +17,11 @@ export default function GameUI({
   resetRoom,
   sendMessage,
   
-  customRoomId={customRoomId},
-  setCustomRoomId={setCustomRoomId},
-  preferredSymbol={preferredSymbol},
-  setPreferredSymbol={setPreferredSymbol},
-  createRoom={createRoom}
+  customRoomId,
+  setCustomRoomId,
+  preferredSymbol,
+  setPreferredSymbol,
+  createRoom
 
 
 
