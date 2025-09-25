@@ -11,12 +11,21 @@ export default function GameUI({
   messages,
   setRoomId,
   setChatOpen,
-  createRoom,
   joinRoom,
   leaveRoom,
   makeMove,
   resetRoom,
-  sendMessage
+  sendMessage,
+  
+  customRoomId={customRoomId},
+  setCustomRoomId={setCustomRoomId},
+  preferredSymbol={preferredSymbol},
+  setPreferredSymbol={setPreferredSymbol},
+  createRoom={createRoom}
+
+
+
+  
 }) {
   const inGame = Boolean(roomId); // ✅ Cek apakah sedang main atau tidak
 
