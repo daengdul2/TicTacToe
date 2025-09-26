@@ -1,304 +1,154 @@
-import { useEffect, useState, useRef } from "react";
+// pages/index.js
+import { useState, useEffect } from "react";
+import { useRouter } from "next/router";
 import { db, auth, signInAnonymously, onAuthStateChanged } from "../lib/firebase";
-import { ref, onValue, set, update, push, get, remove } from "firebase/database";
-import { checkWinner } from "../lib/gameLogic";
-import GameUI from "../components/gameUI";
+import { ref, onValue, set, push, get } from "firebase/database";
+
+// --- KONSTANTA DAN FUNGSI GLOBAL ---
+const INITIAL_BOARD = Array(9).fill(null);
+const INITIAL_STATUS = "waiting";
+
+// Fungsi untuk mendapatkan giliran awal secara acak (X atau O)
+const getRandomTurn = () => (Math.random() < 0.5 ? "X" : "O");
 
 export default function Home() {
   const [user, setUser] = useState(null);
-  const [roomId, setRoomId] = useState("");
-  const [playerSymbol, setPlayerSymbol] = useState(null);
-  const [board, setBoard] = useState(Array(9).fill(""));
-  const [turn, setTurn] = useState("X");
-  const [status, setStatus] = useState("idle");
   const [roomsList, setRoomsList] = useState([]);
-  const [roomInfo, setRoomInfo] = useState(null);
-  const [chatOpen, setChatOpen] = useState(false);
-  const [messages, setMessages] = useState([]);
   const [customRoomId, setCustomRoomId] = useState("");
-const [preferredSymbol, setPreferredSymbol] = useState("X");
+  const [preferredSymbol, setPreferredSymbol] = useState("X");
 
-  const roomRefLive = useRef(null);
-  const chatRefLive = useRef(null); // ✅ listener untuk chat
+  const router = useRouter();
 
-  // 🔹 Firebase Auth
+  // ulogin anon
   useEffect(() => {
-    signInAnonymously(auth).catch(err => console.error("Sign in error:", err));
-    const unsub = onAuthStateChanged(auth, u => setUser(u || null));
+    // Memastikan setUser dipanggil hanya setelah auth selesai
+    const unsub = onAuthStateChanged(auth, (u) => {
+      if (u) setUser(u);
+      else signInAnonymously(auth);
+    });
     return () => unsub();
   }, []);
 
-  // 🔹 Listen daftar room
+  // load list room realtime
   useEffect(() => {
     const roomsRef = ref(db, "rooms");
-    const unsub = onValue(roomsRef, snapshot => {
-      const data = snapshot.val() || {};
-      const arr = Object.keys(data).map(id => {
-        const r = data[id] || {};
-        return {
-          id,
-          playersCount: (r.playerX ? 1 : 0) + (r.playerO ? 1 : 0),
-          status: r.status || "waiting"
-        };
-      });
-      setRoomsList(arr);
+    const unsub = onValue(roomsRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.val();
+        setRoomsList(
+          Object.entries(data).map(([id, room]) => ({
+            id,
+            status: room.status,
+            // Menghitung jumlah pemain secara efisien
+            playersCount: [room.playerX, room.playerO].filter(Boolean).length,
+          }))
+        );
+      } else {
+        setRoomsList([]);
+      }
     });
     return () => unsub();
   }, []);
 
-  // 🔹 Listen room aktif + chat
-  useEffect(() => {
-    if (roomRefLive.current) roomRefLive.current();
-    if (chatRefLive.current) chatRefLive.current();
+  // buat room
+  async function createRoom(roomId, symbol) {
+    if (!user) return;
+    
+    // Deklarasi ref secara lokal
+    const id = roomId || push(ref(db, "rooms")).key;
+    const roomRef = ref(db, `rooms/${id}`);
+    
+    const snapshot = await get(roomRef);
 
-    if (!roomId) {
-      setRoomInfo(null);
-      setMessages([]);
-      setBoard(Array(9).fill(""));
-      setTurn("X");
-      setStatus("idle");
-      return;
+    if (!snapshot.exists()) {
+      
+      // Tentukan giliran awal secara acak
+      const randomTurn = getRandomTurn();
+
+      await set(roomRef, {
+        playerX: symbol === "X" ? user.uid : null,
+        playerO: symbol === "O" ? user.uid : null,
+        board: INITIAL_BOARD, // Menggunakan konstanta global
+        turn: randomTurn,     // Giliran acak
+        status: INITIAL_STATUS, // Status awal "waiting"
+      });
     }
 
-    // room listener
-    const rref = ref(db, `rooms/${roomId}`);
-    const unsubRoom = onValue(rref, snap => {
-      const data = snap.val();
-      if (data) {
-        let boardFromDb = data.board || Array(9).fill("");
-        if (!Array.isArray(boardFromDb)) {
-          boardFromDb = Object.keys(boardFromDb)
-            .sort((a, b) => Number(a) - Number(b))
-            .map(k => boardFromDb[k]);
-          while (boardFromDb.length < 9) boardFromDb.push("");
-        }
-
-        setBoard(boardFromDb);
-        setTurn(data.turn || "X");
-        setStatus(data.status || "waiting");
-        setRoomInfo(data);
-
-        if (user) {
-          if (data.playerX === user.uid) setPlayerSymbol("X");
-          else if (data.playerO === user.uid) setPlayerSymbol("O");
-          else setPlayerSymbol(null);
-        }
-      } else {
-        setRoomInfo(null);
-        setRoomId("");
-        setMessages([]);
-        alert("Room tidak lagi tersedia.");
-      }
-    });
-
-    roomRefLive.current = unsubRoom;
-
-    // chat listener
-    const chatRef = ref(db, `rooms/${roomId}/chat`);
-    const unsubChat = onValue(chatRef, snap => {
-      const data = snap.val();
-      if (!data) {
-        setMessages([]);
-        return;
-      }
-
-      const arr = Array.isArray(data)
-        ? data.filter(Boolean)
-        : Object.entries(data).map(([key, val]) => ({ key, ...val }));
-
-      arr.sort((a, b) => (a.at || 0) - (b.at || 0));
-      setMessages(arr);
-    });
-
-    chatRefLive.current = unsubChat;
-
-    return () => {
-      if (roomRefLive.current) roomRefLive.current();
-      roomRefLive.current = null;
-      if (chatRefLive.current) chatRefLive.current();
-      chatRefLive.current = null;
-    };
-  }, [roomId, user]);
-
-  // 🔹 Kirim chat
-  // Tambahkan state baru
-const [lastMessageTime, setLastMessageTime] = useState(0);
-
-// 🔹 Kirim chat dengan anti-spam
-async function sendMessage(e) {
-  e.preventDefault();
-  if (!user || !roomId) return;
-  const input = e.target.elements.msg.value.trim();
-  if (!input) return;
-
-  const now = Date.now();
-  if (now - lastMessageTime < 10000) { // 10 detik
-    alert("Tunggu 10 detik sebelum mengirim pesan lagi!");
-    return;
+    router.push(`/game?roomId=${id}`);
   }
 
-  const chatRef = push(ref(db, `rooms/${roomId}/chat`));
-  await set(chatRef, {
-    by: user.uid.substring(0, 8),
-    text: input,
-    at: now
-  });
-
-  setLastMessageTime(now); // update waktu terakhir kirim pesan
-  e.target.reset();
-}
-
-  // 🔹 Buat room
- // async function createRoom() {
- //   if (!user) return alert("Signing in... coba lagi.");
-//    const rref = push(ref(db, "rooms"));
- //   const id = rref.key;
-//    const initial = {
-//      board: Array(9).fill(""),
-//      turn: "X",
-//      status: "waiting",
-//      playerX: user.uid,
-//      createdAt: Date.now()
-//    };
-//    await set(rref, initial);
-//    setRoomId(id);
-//    setPlayerSymbol("X");
-//  }
-
-  async function createRoom(customId, symbol) {
-  if (!user) return alert("Signing in... coba lagi.");
-  if (!customId) return alert("Room ID tidak boleh kosong");
-
-  const rref = ref(db, `rooms/${customId}`);
-  const snap = await get(rref);
-
-  if (snap.exists()) {
-    return alert("Room ID sudah dipakai, coba ID lain.");
-  }
-
-  const initial = {
-    board: Array(9).fill(""),
-    turn: "X",
-    status: "waiting",
-    createdAt: Date.now(),
-  };
-
-  // set player sesuai pilihan
-  if (symbol === "X") {
-    initial.playerX = user.uid;
-  } else {
-    initial.playerO = user.uid;
-  }
-
-  await set(rref, initial);
-  setRoomId(customId);
-  setPlayerSymbol(symbol);
-  }
-
-  //batas
-
-  // 🔹 Join room
-  async function joinRoom(id) {
-    if (!user) return alert("Signing in...");
-    const r = ref(db, `rooms/${id}`);
-    const snap = await get(r);
-    if (!snap.exists()) return alert("Room not found");
-    const data = snap.val();
-
-    if (data.playerX === user.uid || data.playerO === user.uid) {
-      setRoomId(id);
-      setPlayerSymbol(data.playerX === user.uid ? "X" : "O");
-      return;
-    }
-
-    if (!data.playerO) {
-      await update(r, { playerO: user.uid, status: "playing" });
-      setPlayerSymbol("O");
-    } else if (!data.playerX) {
-      await update(r, { playerX: user.uid, status: "playing" });
-      setPlayerSymbol("X");
-    } else {
-      alert("Room penuh");
-      return;
-    }
-    setRoomId(id);
-  }
-
-  // 🔹 Gerakan
-  async function makeMove(idx) {
-    if (!user || !roomId || status !== "playing" || !playerSymbol || playerSymbol !== turn || board[idx] !== "")
-      return;
-
-    const newBoard = [...board];
-    newBoard[idx] = playerSymbol;
-    const winner = checkWinner(newBoard);
-
-    const roomRef = ref(db, `rooms/${roomId}`);
-    const updateObj = {
-      board: newBoard,
-      turn: playerSymbol === "X" ? "O" : "X",
-      lastMove: { by: user.uid, idx, at: Date.now() }
-    };
-
-    if (winner) updateObj.status = winner === "draw" ? "draw" : `${winner}-won`;
-    await update(roomRef, updateObj);
-  }
-
-  // 🔹 Reset game
-  async function resetRoom() {
-    if (!roomId || !roomInfo || !user) return;
-    const roomRef = ref(db, `rooms/${roomId}`);
-    await update(roomRef, { board: Array(9).fill(""), turn: "X", status: "playing" });
-  }
-
-  // 🔹 Keluar room
-  async function leaveRoom() {
-    if (!roomId || !user) return;
-    const currentRoomId = roomId;
-    setRoomId("");
-    setPlayerSymbol(null);
-
-    const r = ref(db, `rooms/${currentRoomId}`);
-    const snap = await get(r);
-    if (!snap.exists()) return;
-
-    const data = snap.val();
-    const updates = {};
-    if (data.playerX === user.uid) updates.playerX = null;
-    if (data.playerO === user.uid) updates.playerO = null;
-
-    if ((!data.playerX || data.playerX === user.uid) && (!data.playerO || data.playerO === user.uid)) {
-      await remove(r);
-    } else {
-      await update(r, updates);
-    }
+  // join room
+  function joinRoom(id) {
+    if (!id) return alert("Masukkan Room ID");
+    router.push(`/game?roomId=${id}`);
   }
 
   return (
-    <GameUI
-  user={user}
-  roomId={roomId}
-  roomsList={roomsList}
-  playerSymbol={playerSymbol}
-  turn={turn}
-  status={status}
-  board={board}
-  roomInfo={roomInfo}
-  chatOpen={chatOpen}
-  messages={messages}
-  setRoomId={setRoomId}
-  setChatOpen={setChatOpen}
-  createRoom={createRoom}
-  joinRoom={joinRoom}
-  leaveRoom={leaveRoom}
-  makeMove={makeMove}
-  resetRoom={resetRoom}
-  sendMessage={sendMessage}
+    <main>
+      <h1>TicTacToe — Online</h1>
+      <div>User: {user ? user.uid.substring(0, 8) : "... signing in"}</div>
 
-  customRoomId={customRoomId}
-  setCustomRoomId={setCustomRoomId}
-  preferredSymbol={preferredSymbol}
-  setPreferredSymbol={setPreferredSymbol}
-/>
+      {/* Create room custom */}
+      <div>
+        <input
+          type="text"
+          placeholder="Custom Room ID"
+          value={customRoomId}
+          onChange={(e) => setCustomRoomId(e.target.value)}
+        />
+        <select
+          value={preferredSymbol}
+          onChange={(e) => setPreferredSymbol(e.target.value)}
+        >
+          <option value="X">Play as X</option>
+          <option value="O">Play as O</option>
+        </select>
+        <button onClick={() => createRoom(customRoomId, preferredSymbol)}>
+          Create Room
+        </button>
+      </div>
+
+      {/* Quick Join */}
+      <div>
+        <button
+          onClick={() => {
+            // Temukan room yang memiliki kurang dari 2 pemain
+            const avail = roomsList.find((r) => r.playersCount < 2);
+            if (avail) joinRoom(avail.id);
+            else alert("Tidak ada room kosong");
+          }}
+        >
+          Quick Join
+        </button>
+      </div>
+
+      {/* Daftar room */}
+      <div>
+        <strong>Available Rooms</strong>
+        <ul className="room-list">
+          {roomsList.length === 0 && <li>(no rooms)</li>}
+          {roomsList.map((r) => (
+            <li key={r.id}>
+              <button onClick={() => joinRoom(r.id)}>
+                {r.id.substring(r.id.length - 6)}
+              </button>{" "}
+              ({r.status}) — players: {r.playersCount}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Input manual */}
+      <div>
+        <label>
+          Room ID:
+          <input
+            value={customRoomId}
+            onChange={(e) => setCustomRoomId(e.target.value)}
+          />
+        </label>
+        <button onClick={() => joinRoom(customRoomId)}>Join</button>
+      </div>
+    </main>
   );
-                   }
+}
