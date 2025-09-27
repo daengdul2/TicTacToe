@@ -4,7 +4,7 @@ import {useRouter} from "next/router";
 import {db, auth, signInAnonymously, onAuthStateChanged} from "../lib/firebase";
 import {ref, onValue, set, update, get, remove, push} from "firebase/database";
 import {checkWinner} from "../lib/gameLogic";
-import CustomToast from "../components/CustomToast"; // IMPORT KOMPONEN TOAST
+import CustomToast from "../components/CustomToast";
 
 // --- KONSTANTA DAN FUNGSI GLOBAL ---
 const INITIAL_BOARD = Array(9).fill("");
@@ -12,6 +12,17 @@ const INITIAL_TURN = "X";
 const INITIAL_STATUS = "waiting";
 
 const getRandomTurn = () => (Math.random() < 0.5 ? "X" : "O");
+
+// --- KOMPONEN BARU UNTUK KOTAK PAPAN ---
+// Diletakkan di luar komponen utama, tapi di file yang sama
+function Square({ value, onSquareClick, disabled }) {
+  return (
+    <button className="cell" onClick={onSquareClick} disabled={disabled}>
+      {value}
+    </button>
+  );
+}
+
 
 export default function GamePage() {
     const router = useRouter();
@@ -28,21 +39,16 @@ export default function GamePage() {
     const [chatOpen, setChatOpen] = useState(false);
     const [messages, setMessages] = useState([]);
     const [lastMessageTime, setLastMessageTime] = useState(0);
-    
-    // State baru untuk mengelola notifikasi toast
     const [toastMessage, setToastMessage] = useState(null); 
 
     const roomRefLive = useRef(null);
     const chatRefLive = useRef(null);
     const isLeavingRef = useRef(false);
     const hasJoinedRef = useRef(false);
-    
-    // useRef untuk elemen chat yang bisa di-scroll
     const chatScrollRef = useRef(null); 
-    
-    // 🔥 Ref baru untuk melacak pesan terakhir yang dilihat (perbaikan Toast)
     const lastSeenMessageKeyRef = useRef(null); 
     
+    // ... (Semua fungsi useEffect dan fungsi lainnya tetap sama persis) ...
     // --- auth anon ---
     useEffect(() => {
         signInAnonymously(auth).catch(console.error);
@@ -138,7 +144,7 @@ export default function GamePage() {
             
             if (!data) {
                 setMessages([]);
-                lastSeenMessageKeyRef.current = null; // Reset jika chat kosong
+                lastSeenMessageKeyRef.current = null;
                 return;
             }
             const arr = Object.entries(data).map(([key, val]) => ({
@@ -150,16 +156,17 @@ export default function GamePage() {
             
             const latestMessage = arr[arr.length - 1];
             
-            // 🔥 LOGIKA NOTIFIKASI TOAST (Menggunakan Ref)
             if (latestMessage && 
                 !chatOpen && 
                 lastSeenMessageKeyRef.current !== latestMessage.key) 
             {
-                // Jika pesan terbaru BUKAN yang terakhir kita lihat DAN chat tertutup
-                setToastMessage(`${latestMessage.by}: ${latestMessage.text}`);
+                const senderDisplayName = 
+                    user && latestMessage.by === user.uid.substring(0, 6)
+                        ? "Saya" 
+                        : "Lawan";
+                setToastMessage(`${senderDisplayName}: ${latestMessage.text}`);
             }
 
-            // PERBAIKAN PENTING: Perbarui ref dengan kunci pesan terbaru yang masuk
             if (latestMessage) {
                 lastSeenMessageKeyRef.current = latestMessage.key;
             }
@@ -176,16 +183,12 @@ export default function GamePage() {
         };
     }, [roomId, user, router, chatOpen]);
 
-    // --- useEffect untuk Auto-Scroll Chat ---
     useEffect(() => {
-        // Gulir hanya jika chat sedang terbuka dan ref sudah terpasang
         if (chatOpen && chatScrollRef.current) {
             chatScrollRef.current.scrollTop = chatScrollRef.current.scrollHeight;
         }
     }, [messages, chatOpen]);
 
-
-    // --- make move ---
     async function makeMove(idx) {
         if (
             !user ||
@@ -212,36 +215,23 @@ export default function GamePage() {
         await update(roomRef, updateObj);
     }
 
-    // --- reset room ---
     async function resetRoom() {
         if (!roomInfo || !user) return;
-
-        const gameOver =
-            roomInfo.status === "X-won" ||
-            roomInfo.status === "O-won" ||
-            roomInfo.status === "draw";
-        const onePlayer =
-            (roomInfo.playerX && !roomInfo.playerO) ||
-            (!roomInfo.playerX && roomInfo.playerO);
-
+        const gameOver = roomInfo.status === "X-won" || roomInfo.status === "O-won" || roomInfo.status === "draw";
+        const onePlayer = (roomInfo.playerX && !roomInfo.playerO) || (!roomInfo.playerX && roomInfo.playerO);
         if (!gameOver && !onePlayer) {
-            alert(
-                "Reset hanya setelah game selesai atau salah satu player keluar."
-            );
+            alert("Reset hanya setelah game selesai atau salah satu player keluar.");
             return;
         }
-
         const r = ref(db, `rooms/${roomId}`);
         const updates = {};
         const randomTurn = getRandomTurn();
-
         updates.board = INITIAL_BOARD;
         updates.turn = randomTurn;
         updates.status = onePlayer ? "waiting" : "playing";
         await update(r, updates);
     }
 
-    // --- leave room ---
     async function leaveRoom() {
         if (!roomId || !user) return;
         if (!confirm("Yakin keluar? Kamu dianggap kalah.")) return;
@@ -301,32 +291,25 @@ export default function GamePage() {
         router.push("/");
     }
 
-    // --- chat ---
     async function sendMessage(e) {
         e.preventDefault();
         if (!user || !roomId) return;
         const text = e.target.elements.msg.value.trim();
         if (!text) return;
-
         const now = Date.now();
         if (now - lastMessageTime < 10000) {
             alert("Tunggu 10 detik untuk kirim lagi!");
             return;
         }
-
         const cref = push(ref(db, `rooms/${roomId}/chat`));
         await set(cref, {by: user.uid.substring(0, 6), text, at: now});
         setLastMessageTime(now);
         e.target.reset();
     }
 
-    // --- alert menang/kalah/seri & Auto-Reset dengan Timer ---
     useEffect(() => {
         if (!status || !playerSymbol) return;
-
-        const gameOver =
-            status === "X-won" || status === "O-won" || status === "draw";
-
+        const gameOver = status === "X-won" || status === "O-won" || status === "draw";
         if (gameOver) {
             if (status === "draw") {
                 alert("Seri!");
@@ -335,34 +318,27 @@ export default function GamePage() {
             } else {
                 alert("😢 Kamu Kalah!");
             }
-
             setResetTimer(5);
-
             let countdown = 5;
             const interval = setInterval(() => {
                 countdown -= 1;
                 setResetTimer(countdown);
-
                 if (countdown <= 0) {
                     clearInterval(interval);
                     resetRoom(); 
                 }
             }, 1000); 
-
             return () => {
                 clearInterval(interval);
                 setResetTimer(0);
             };
         }
-
         setResetTimer(0);
     }, [status, playerSymbol]); 
 
     if (!roomId) return <p>Room tidak ditemukan.</p>;
 
-    // --- count players ---
-    const playerCount =
-        (roomInfo?.playerX ? 1 : 0) + (roomInfo?.playerO ? 1 : 0);
+    const playerCount = (roomInfo?.playerX ? 1 : 0) + (roomInfo?.playerO ? 1 : 0);
 
     return (
         <main>
@@ -372,21 +348,22 @@ export default function GamePage() {
                 {playerCount}/2 | Status: {status}
             </div>
 
+            {/* --- BAGIAN PAPAN YANG DIPERBARUI --- */}
             <div className="board">
                 {board.map((cell, i) => {
-                    const canPlay =
+                    const canPlay = 
                         playerSymbol === turn && !cell && status === "playing";
                     return (
-                        <button
+                        <Square
                             key={i}
-                            className="cell"
-                            onClick={() => makeMove(i)}
-                            disabled={!canPlay}>
-                            {cell}
-                        </button>
+                            value={cell}
+                            onSquareClick={() => makeMove(i)}
+                            disabled={!canPlay}
+                        />
                     );
                 })}
             </div>
+            {/* --- AKHIR BAGIAN YANG DIPERBARUI --- */}
 
             <div>
                 <button onClick={leaveRoom}>Leave</button>
@@ -406,28 +383,20 @@ export default function GamePage() {
             {chatOpen && (
                 <div className="chat-box">
                     <div className="box">
-                        <div 
-                            className="message-box" 
-                            ref={chatScrollRef}
-                        > 
-                            {/* --- PERUBAHAN DIMULAI DI SINI --- */}
+                        <div className="message-box" ref={chatScrollRef}> 
                             {messages.map((m) => {
-                                // Tentukan apakah pengirim pesan adalah pengguna saat ini ('Saya') atau pemain lain ('Lawan')
                                 const senderDisplayName = 
                                     user && m.by === user.uid.substring(0, 6)
                                         ? "Saya" 
                                         : "Lawan";
-
                                 return (
                                     <div key={m.key} style={{marginBottom: '5px'}}>
-                                        {/* Tampilkan nama yang sudah diubah */}
                                         <strong style={{color: senderDisplayName === "Saya" ? "#007bff" : "#dc3545"}}>
                                             {senderDisplayName}:
                                         </strong> {m.text}
                                     </div>
                                 );
                             })}
-                            {/* --- PERUBAHAN SELESAI DI SINI --- */}
                         </div>
                         <form onSubmit={sendMessage}>
                             <input name="msg" placeholder="Ketik pesan..." />
@@ -439,12 +408,11 @@ export default function GamePage() {
                 </div>
             )}
             
-            {/* 🔥 Komponen Toast Notifikasi */}
             <CustomToast
                 message={toastMessage}
                 onClose={() => {
-                    setToastMessage(null); // Sembunyikan toast
-                    setChatOpen(true);    // Opsi: Langsung buka chat saat toast diklik
+                    setToastMessage(null);
+                    setChatOpen(true);
                 }}
             />
         </main>
